@@ -1,0 +1,64 @@
+{
+  "name": "hyperstache",
+  "version": "0.1.0",
+  "description": "Framework for bundling AO Lua processes with Mustache templating, Luarocks support, and Vite",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./vite": {
+      "import": "./dist/vite.js",
+      "types": "./dist/vite.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "hyperstache": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "ao",
+    "arweave",
+    "hyperbeam",
+    "lua",
+    "mustache",
+    "lustache",
+    "vite",
+    "bundler",
+    "luarocks"
+  ],
+  "author": "Jim Toth",
+  "license": "AGPL-3.0",
+  "dependencies": {
+    "commander": "^12.1.0",
+    "esbuild": "^0.24.0",
+    "fast-glob": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.0",
+    "vite": "^6.0.0",
+    "vitest": "^2.1.0"
+  },
+  "peerDependencies": {
+    "vite": ">=5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
+  }
+}
