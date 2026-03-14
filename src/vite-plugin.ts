@@ -43,9 +43,28 @@ export function hyperstache(options?: HyperstachePluginOptions): Plugin {
     },
 
     configureServer(server) {
-      // Watch Lua and template files for changes
+      // Watch Lua, template, and template-referenced asset files
       const extensions = hsConfig.templates.extensions
-      const watchPatterns = ['**/*.lua', ...extensions.map((e) => `**/*${e}`)]
+      const watchPatterns = [
+        '**/*.lua',
+        ...extensions.map((e) => `**/*${e}`),
+      ]
+
+      // If Vite template processing is enabled, also watch CSS/JS/TS
+      // files under the templates directory
+      if (hsConfig.templates.vite) {
+        watchPatterns.push(
+          '**/*.css',
+          '**/*.scss',
+          '**/*.sass',
+          '**/*.less',
+          '**/*.styl',
+          '**/*.js',
+          '**/*.ts',
+          '**/*.jsx',
+          '**/*.tsx',
+        )
+      }
 
       server.watcher.add(watchPatterns)
     },
@@ -55,12 +74,15 @@ export function hyperstache(options?: HyperstachePluginOptions): Plugin {
       const isTemplate = hsConfig.templates.extensions.some((ext) =>
         file.endsWith(ext),
       )
+      const isTemplateAsset =
+        hsConfig.templates.vite &&
+        /\.(css|scss|sass|less|styl|js|ts|jsx|tsx)$/.test(file)
 
-      if (isLua || isTemplate) {
+      if (isLua || isTemplate || isTemplateAsset) {
         console.log(`[hyperstache] File changed: ${file}, re-bundling...`)
         const result = await bundle(hsConfig)
         console.log(
-          `[hyperstache] Re-bundled ${result.moduleCount} modules, ${result.templateCount} templates`,
+          `[hyperstache] Re-bundled ${result.moduleCount} modules, ${result.templateCount} templates${result.viteProcessed ? ' (Vite processed)' : ''}`,
         )
         // Trigger full page reload since Lua changes affect the process
         server.ws.send({ type: 'full-reload' })
@@ -71,4 +93,4 @@ export function hyperstache(options?: HyperstachePluginOptions): Plugin {
 }
 
 export { defineConfig } from './config.js'
-export type { HyperstacheConfig, ResolvedConfig } from './config.js'
+export type { HyperstacheConfig, ResolvedConfig, ViteTemplateOptions } from './config.js'

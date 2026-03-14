@@ -2,5 +2,8 @@
   "Lua.workspace.library": [
     "${addons}/ao/module/library"
   ],
-  "Lua.workspace.checkThirdParty": false
+  "Lua.workspace.checkThirdParty": false,
+  "Lua.diagnostics.disable": [
+    "lowercase-global"
+  ]
 }

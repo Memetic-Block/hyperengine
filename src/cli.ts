@@ -27,7 +27,8 @@ program
     const config = await loadConfig(root)
     const result = await bundle(config)
 
-    console.log(`Bundled ${result.moduleCount} modules, ${result.templateCount} templates`)
+    const viteNote = result.viteProcessed ? ' (Vite processed)' : ''
+    console.log(`Bundled ${result.moduleCount} modules, ${result.templateCount} templates${viteNote}`)
     console.log(`Output: ${result.outPath}`)
 
     if (result.unresolved.length > 0) {

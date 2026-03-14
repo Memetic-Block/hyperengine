@@ -4,6 +4,8 @@ Framework for bundling [AO](https://ao.arweave.dev) Lua processes with [Mustache
 
 HTML templates are inlined as Lua string constants and rendered at runtime using [lustache](https://github.com/Olivine-Labs/lustache) inside the AO process.
 
+Optionally, templates can be processed through Vite before bundling — CSS, TypeScript, and other assets referenced by your HTML are compiled and inlined, producing fully self-contained templates with no external local dependencies.
+
 ## Prerequisites
 You will need [luarocks](https://luarocks.org/#quick-start) installed in order to resolve
 [lustache](https://luarocks.org/modules/luarocks/lustache) for rendering inside your AO process,
@@ -85,6 +87,83 @@ $ curl -L 'https://push.forward.computer/<process_id>/now/home'; echo
 </html>
 ```
 
+## Vite Template Processing
+
+Enable Vite-powered template processing to compile CSS, TypeScript, and other frontend assets directly into your HTML templates before they're bundled into Lua:
+
+```ts
+// hyperstache.config.ts
+import { defineConfig } from 'hyperstache'
+
+export default defineConfig({
+  entry: 'src/process.lua',
+  templates: {
+    vite: true,
+  },
+  luarocks: {
+    dependencies: { lustache: '1.3.1-0' },
+  },
+})
+```
+
+Your templates can reference local CSS and JS/TS files with standard HTML tags:
+
+```html
+<!-- src/templates/index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <title>{{title}}</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <h1>{{title}}</h1>
+  <div id="app"></div>
+  <script type="module" src="./app.ts"></script>
+</body>
+</html>
+```
+
+When you run `hyperstache build`, Vite will:
+
+1. Compile TypeScript, process PostCSS/Tailwind, bundle JS modules
+2. Inline all local `<link rel="stylesheet">` → `<style>` and `<script src>` → `<script>` tags
+3. Preserve remote URLs (`https://`, `//`) unchanged
+4. Preserve all Mustache `{{expressions}}` through the pipeline
+
+The result is self-contained HTML with all assets embedded, ready for Lua inlining.
+
+### Advanced Vite Options
+
+Pass Vite configuration for PostCSS, Tailwind, custom plugins, and more:
+
+```ts
+import { defineConfig } from 'hyperstache'
+import tailwindcss from '@tailwindcss/vite'
+
+export default defineConfig({
+  entry: 'src/process.lua',
+  templates: {
+    vite: {
+      plugins: [tailwindcss()],
+      css: {
+        // PostCSS options, preprocessor options, etc.
+      },
+      resolve: {
+        alias: { '@': './src' },
+      },
+      define: {
+        __APP_VERSION__: JSON.stringify('1.0.0'),
+      },
+    },
+  },
+})
+```
+
+If a `vite.config.ts` exists in your project root, it will be auto-detected and merged with the template-specific options.
+
+Only `.html` templates are processed through Vite. Other template formats (`.htm`, `.tmpl`, `.mustache`, etc.) pass through unchanged.
+
 ## Project Structure
 
 ```
@@ -97,6 +176,8 @@ my-ao-app/
       home.lua
     templates/
       index.html
+      styles.css
+      app.ts
       profile.htm
       layout.tmpl
     lib/
@@ -153,7 +234,8 @@ export default defineConfig({
 The plugin:
 - Runs the Lua bundler on `buildStart`
 - Watches `.lua` and template files for changes
-- Triggers a full-reload when Lua or template sources change
+- When `templates.vite` is enabled, also watches CSS/JS/TS files under the templates directory
+- Triggers a full-reload when Lua, template, or asset sources change
 
 ## Config Reference
 
@@ -173,6 +255,13 @@ interface HyperstacheConfig {
     extensions?: string[]
     /** Directory to scan (default: same as entry file's directory) */
     dir?: string
+    /** Process templates through Vite (inline CSS/JS). true for defaults, or pass options. */
+    vite?: boolean | {
+      plugins?: VitePlugin[]
+      css?: ViteCSSOptions
+      resolve?: ViteResolveOptions
+      define?: Record<string, string>
+    }
   }
 
   luarocks?: {
@@ -188,8 +277,9 @@ interface HyperstacheConfig {
 
 1. **Resolve** — Parses `require()` calls from the entry Lua file, recursively resolves modules from the project source tree and `lua_modules/` (luarocks local install)
 2. **Collect** — Globs template files, reads them, wraps each in Lua long-string brackets
-3. **Emit** — Wraps each module in a function, generates a `require`-compatible loader, inlines templates as a virtual `require('templates')` module, and appends the entry point source
-4. **Output** — Writes a single flat `.lua` file to `outDir/outFile`
+3. **Render** *(optional)* — If `templates.vite` is enabled, processes `.html` templates through Vite: escapes Mustache syntax, runs Vite build to compile and inline CSS/JS assets, restores Mustache syntax
+4. **Emit** — Wraps each module in a function, generates a `require`-compatible loader, inlines templates as a virtual `require('templates')` module, and appends the entry point source
+5. **Output** — Writes a single flat `.lua` file to `outDir/outFile`
 
 The output is self-contained and runs in AO's Lua runtime without external dependencies.
 

@@ -1,6 +1,18 @@
 import { readFile, mkdir, writeFile, stat } from 'node:fs/promises'
 import { resolve, dirname, join, extname } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import type { UserConfig as ViteUserConfig } from 'vite'
+
+export interface ViteTemplateOptions {
+  /** Vite plugins to use when processing templates */
+  plugins?: ViteUserConfig['plugins']
+  /** CSS options (PostCSS, preprocessors, etc.) */
+  css?: ViteUserConfig['css']
+  /** Resolve options (aliases, extensions, etc.) */
+  resolve?: ViteUserConfig['resolve']
+  /** Define global constant replacements */
+  define?: ViteUserConfig['define']
+}
 
 export interface HyperstacheConfig {
   /** Lua entry point, e.g. "src/process.lua" */
@@ -14,6 +26,8 @@ export interface HyperstacheConfig {
     extensions?: string[]
     /** Directory to scan for templates (default: auto-discover from entry dir) */
     dir?: string
+    /** Enable Vite processing of templates. `true` for defaults, or pass options. */
+    vite?: boolean | ViteTemplateOptions
   }
   luarocks?: {
     /** Luarocks dependencies, e.g. { lustache: "1.3.1-0" } */
@@ -31,6 +45,7 @@ export interface ResolvedConfig {
   templates: {
     extensions: string[]
     dir: string
+    vite: ViteTemplateOptions | false
   }
   luarocks: {
     dependencies: Record<string, string>
@@ -61,6 +76,10 @@ export async function resolveConfig(
   const entry = resolve(root, raw.entry)
   const entryDir = dirname(entry)
 
+  const rawVite = raw.templates?.vite
+  const viteOpts: ViteTemplateOptions | false =
+    rawVite === true ? {} : rawVite === false || rawVite == null ? false : rawVite
+
   return {
     root,
     entry,
@@ -69,6 +88,7 @@ export async function resolveConfig(
     templates: {
       extensions: raw.templates?.extensions ?? [ '.html', '.htm', '.tmpl', '.mustache', '.mst', '.mu', '.stache' ],
       dir: await resolveTemplatesDir(root, entryDir, raw.templates?.dir),
+      vite: viteOpts,
     },
     luarocks: {
       dependencies: raw.luarocks?.dependencies ?? {},
