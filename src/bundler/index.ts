@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve, dirname } from 'node:path'
-import type { ResolvedConfig } from '../config.js'
+import type { ResolvedConfig, ResolvedProcessConfig } from '../config.js'
 import { resolveModules } from './resolver.js'
 import { collectTemplates } from './templates.js'
 import { emitBundle } from './emit.js'
@@ -12,6 +12,8 @@ export type { TemplateEntry } from './templates.js'
 export type { EscapeResult } from './vite-render.js'
 
 export interface BundleResult {
+  /** Process name from config */
+  processName: string
   /** The bundled Lua source */
   output: string
   /** Path the bundle was written to */
@@ -27,22 +29,22 @@ export interface BundleResult {
 }
 
 /**
- * Run the full bundling pipeline: resolve → collect templates → emit.
+ * Run the full bundling pipeline for a single process: resolve → collect templates → emit.
  */
-export async function bundle(config: ResolvedConfig): Promise<BundleResult> {
+export async function bundleProcess(process: ResolvedProcessConfig): Promise<BundleResult> {
   // 1. Resolve Lua modules
-  const { modules, unresolved } = await resolveModules(config)
+  const { modules, unresolved } = await resolveModules(process)
 
   // 2. Collect templates
-  const { entries, luaSource: templatesLua } = await collectTemplates(config)
+  const { entries, luaSource: templatesLua } = await collectTemplates(process)
 
   // 3. Process templates through Vite if enabled
-  const viteEnabled = !!config.templates.vite
+  const viteEnabled = !!process.templates.vite
   let templatesSource: string | null = null
 
   if (entries.length > 0) {
     if (viteEnabled) {
-      const processed = await renderTemplates(entries, config)
+      const processed = await renderTemplates(entries, process)
       // Re-generate Lua source from Vite-processed entries
       const { toLuaLongString } = await import('./templates.js')
       const lines: string[] = ['local _templates = {}']
@@ -60,11 +62,12 @@ export async function bundle(config: ResolvedConfig): Promise<BundleResult> {
   const output = emitBundle(modules, templatesSource)
 
   // 5. Write output
-  const outPath = resolve(config.outDir, config.outFile)
+  const outPath = resolve(process.outDir, process.outFile)
   await mkdir(dirname(outPath), { recursive: true })
   await writeFile(outPath, output, 'utf-8')
 
   return {
+    processName: process.name,
     output,
     outPath,
     unresolved,
@@ -72,4 +75,11 @@ export async function bundle(config: ResolvedConfig): Promise<BundleResult> {
     templateCount: entries.length,
     viteProcessed: viteEnabled && entries.length > 0,
   }
+}
+
+/**
+ * Run the full bundling pipeline for all processes in parallel.
+ */
+export async function bundle(config: ResolvedConfig): Promise<BundleResult[]> {
+  return Promise.all(config.processes.map(bundleProcess))
 }

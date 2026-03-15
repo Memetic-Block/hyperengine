@@ -87,7 +87,9 @@ function configBasic(): string {
   return `import { defineConfig } from 'hyperstache'
 
 export default defineConfig({
-  entry: 'src/process.lua',
+  processes: {
+    main: { entry: 'src/process.lua' },
+  },
   luarocks: {
     dependencies: {
       lustache: '1.3.1-0',
@@ -105,7 +107,9 @@ function configVite(): string {
   return `import { defineConfig } from 'hyperstache'
 
 export default defineConfig({
-  entry: 'src/process.lua',
+  processes: {
+    main: { entry: 'src/process.lua' },
+  },
   templates: {
     vite: true,
   },
@@ -228,7 +232,9 @@ function configTailwind(): string {
 import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
-  entry: 'src/process.lua',
+  processes: {
+    main: { entry: 'src/process.lua' },
+  },
   templates: {
     vite: {
       plugins: [tailwindcss()],

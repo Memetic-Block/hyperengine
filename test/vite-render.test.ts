@@ -93,14 +93,19 @@ describe('renderTemplates', () => {
 
   it('passes through when vite is disabled', async () => {
     const config = await resolveConfig(
-      { entry: 'src/process.lua' },
+      {
+        processes: {
+          main: { entry: 'src/process.lua' },
+        },
+      },
       fixtureRoot,
     )
+    const proc = config.processes[0]
     // vite defaults to false
-    expect(config.templates.vite).toBe(false)
+    expect(proc.templates.vite).toBe(false)
 
-    const { entries } = await collectTemplates(config)
-    const result = await renderTemplates(entries, config)
+    const { entries } = await collectTemplates(proc)
+    const result = await renderTemplates(entries, proc)
 
     // Should return entries unchanged
     expect(result).toEqual(entries)
@@ -109,14 +114,17 @@ describe('renderTemplates', () => {
   it('processes templates through Vite when enabled', async () => {
     const config = await resolveConfig(
       {
-        entry: 'src/process.lua',
+        processes: {
+          main: { entry: 'src/process.lua' },
+        },
         templates: { vite: true },
       },
       fixtureRoot,
     )
+    const proc = config.processes[0]
 
-    const { entries } = await collectTemplates(config)
-    const result = await renderTemplates(entries, config)
+    const { entries } = await collectTemplates(proc)
+    const result = await renderTemplates(entries, proc)
 
     // Should still have the same number of templates
     expect(result.length).toBe(entries.length)
@@ -142,14 +150,17 @@ describe('renderTemplates', () => {
   it('preserves remote URLs', async () => {
     const config = await resolveConfig(
       {
-        entry: 'src/process.lua',
+        processes: {
+          main: { entry: 'src/process.lua' },
+        },
         templates: { vite: true },
       },
       fixtureRoot,
     )
+    const proc = config.processes[0]
 
-    const { entries } = await collectTemplates(config)
-    const result = await renderTemplates(entries, config)
+    const { entries } = await collectTemplates(proc)
+    const result = await renderTemplates(entries, proc)
 
     const profile = result.find((e) => e.key === 'profile.htm')
     expect(profile).toBeDefined()
@@ -177,14 +188,18 @@ describe('bundle with vite templates', () => {
   it('bundles with Vite-processed templates', async () => {
     const config = await resolveConfig(
       {
-        entry: 'src/process.lua',
+        processes: {
+          main: { entry: 'src/process.lua' },
+        },
         outDir: 'dist',
         templates: { vite: true },
       },
       fixtureRoot,
     )
 
-    const result = await bundle(config)
+    const results = await bundle(config)
+    expect(results).toHaveLength(1)
+    const result = results[0]
 
     expect(result.viteProcessed).toBe(true)
     expect(result.templateCount).toBe(2)

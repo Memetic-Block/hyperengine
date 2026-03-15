@@ -6,6 +6,8 @@ HTML templates are inlined as Lua string constants and rendered at runtime using
 
 Optionally, templates can be processed through Vite before bundling — CSS, TypeScript, and other assets referenced by your HTML are compiled and inlined, producing fully self-contained templates with no external local dependencies.
 
+A single project can define multiple processes, each producing its own self-contained Lua bundle.
+
 ## Prerequisites
 You will need [luarocks](https://luarocks.org/#quick-start) installed in order to resolve
 [lustache](https://luarocks.org/modules/luarocks/lustache) for rendering inside your AO process,
@@ -66,7 +68,9 @@ Create a config file in your project root:
 import { defineConfig } from 'hyperstache'
 
 export default defineConfig({
-  entry: 'src/process.lua',
+  processes: {
+    main: { entry: 'src/process.lua' },
+  },
   luarocks: {
     dependencies: {
       lustache: '1.3.1-0'
@@ -86,6 +90,17 @@ Send({
   device = 'patch@1.0',
   home = lustache:render(templates['index.html'], { title = 'Hello' })
 })
+```
+
+Or Dynamic Read module:
+```lua
+-- src/dynamid_read.lua
+local templates = require('templates')
+local lustache = require('lustache')
+
+function hello_world(base, req)
+  return lustache:render(templates['index.html'], { title = 'Hello, ' .. req.name .. '!' })
+end
 ```
 
 Add HTML templates alongside your Lua source:
@@ -112,6 +127,9 @@ This produces a single `dist/process.lua` file with all Lua modules merged and a
 Once your process has been deployed, you'll be able to browse your rendered pages from a HyperBEAM node:
 ```bash
 $ curl -L 'https://push.forward.computer/<process_id>/now/home'; echo
+```
+will return
+```html
 <!DOCTYPE html>
 <html>
 <head><title>Hello</title></head>
@@ -119,6 +137,76 @@ $ curl -L 'https://push.forward.computer/<process_id>/now/home'; echo
   <h1>Hello</h1>
 </body>
 </html>
+```
+
+Or with a dynamic read module such as the one referenced above from a HyperBEAM node:
+```bash
+$ curl -L 'https://push.forward.computer/<process_id>/now/~lua@5.3a&module=<module_id>/hello_world?name=Hyperstache'; echo
+```
+will return
+```html
+<!DOCTYPE html>
+<html>
+<head><title>Hello, Hyperstache!</title></head>
+<body>
+  <h1>Hello, Hyperstache!</h1>
+</body>
+</html>
+```
+
+## Multiple Processes
+
+A single project can define multiple AO processes. Each process gets its own entry point and produces a separate bundled Lua file:
+
+```ts
+// hyperstache.config.ts
+import { defineConfig } from 'hyperstache'
+
+export default defineConfig({
+  processes: {
+    main: { entry: 'src/process.lua' },
+    worker: { entry: 'src/worker.lua', outFile: 'worker.lua' },
+  },
+  luarocks: {
+    dependencies: { lustache: '1.3.1-0' },
+  },
+})
+```
+
+Running `hyperstache build` bundles all processes in parallel, producing `dist/process.lua` and `dist/worker.lua`.
+
+### Per-Process Overrides
+
+Each process inherits top-level `templates` and `luarocks` settings, but can override them:
+
+```ts
+export default defineConfig({
+  processes: {
+    main: { entry: 'src/process.lua' },
+    worker: {
+      entry: 'src/worker.lua',
+      outFile: 'worker.lua',
+      templates: { dir: 'src/worker-templates' },
+      luarocks: { dependencies: { json: '1.0-0' } },
+    },
+  },
+  templates: { vite: true },
+  luarocks: {
+    dependencies: { lustache: '1.3.1-0' },
+  },
+})
+```
+
+- **`outFile`** defaults to the entry filename (e.g. `src/worker.lua` → `worker.lua`)
+- Per-process `luarocks.dependencies` are merged with shared defaults
+- Per-process `templates` settings (extensions, dir, vite) override shared defaults
+
+### Building a Specific Process
+
+Use `--process` to build only one:
+
+```bash
+npx hyperstache build --process main
 ```
 
 ## Vite Template Processing
@@ -130,7 +218,9 @@ Enable Vite-powered template processing to compile CSS, TypeScript, and other fr
 import { defineConfig } from 'hyperstache'
 
 export default defineConfig({
-  entry: 'src/process.lua',
+  processes: {
+    main: { entry: 'src/process.lua' },
+  },
   templates: {
     vite: true,
   },
@@ -176,7 +266,9 @@ import { defineConfig } from 'hyperstache'
 import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
-  entry: 'src/process.lua',
+  processes: {
+    main: { entry: 'src/process.lua' },
+  },
   templates: {
     vite: {
       plugins: [tailwindcss()],
@@ -206,6 +298,7 @@ my-ao-app/
   package.json
   src/
     process.lua
+    worker.lua
     handlers/
       home.lua
     templates/
@@ -228,8 +321,11 @@ and made available via `require('templates')` as a table keyed by relative path.
 # Create a new project
 hyperstache create [name] [--template basic|vite|typescript|tailwind]
 
-# Bundle the Lua process
+# Bundle all processes
 hyperstache build
+
+# Bundle a specific process
+hyperstache build --process main
 
 # Start Vite dev server with live-reload on Lua/template changes
 hyperstache dev
@@ -241,13 +337,48 @@ hyperstache rockspec
 | Command    | Description                                                      |
 |------------|------------------------------------------------------------------|
 | `create`   | Scaffold a new hyperstache project from a template               |
-| `build`    | Resolve Lua modules, inline templates, emit single `.lua` bundle |
+| `build`    | Resolve Lua modules, inline templates, emit `.lua` bundles       |
 | `dev`      | Start Vite dev server with the hyperstache plugin                |
 | `rockspec` | Generate a `.rockspec` file from luarocks config                 |
 
 Options for all commands:
 
 - `-r, --root <dir>` — Project root directory (default: `.`)
+- `-p, --process <name>` — Target a specific process (build/dev only)
+
+## Configuration
+
+```ts
+import { defineConfig } from 'hyperstache'
+
+export default defineConfig({
+  // Named process definitions (required)
+  processes: {
+    main: {
+      entry: 'src/process.lua',    // Lua entry point (required)
+      outFile: 'process.lua',      // Output filename (default: derived from entry)
+      templates: { /* ... */ },     // Per-process template overrides
+      luarocks: { /* ... */ },      // Per-process luarocks overrides
+    },
+  },
+
+  // Output directory (default: "dist")
+  outDir: 'dist',
+
+  // Shared template defaults
+  templates: {
+    extensions: ['.html', '.htm', '.tmpl', '.mustache', '.mst', '.mu', '.stache'],
+    dir: 'src/templates',           // Auto-detected from entry dir by default
+    vite: true,                     // or { plugins, css, resolve, define }
+  },
+
+  // Shared luarocks defaults
+  luarocks: {
+    dependencies: { lustache: '1.3.1-0' },
+    luaVersion: '5.3',
+  },
+})
+```
 
 ## Vite Plugin
 
@@ -260,7 +391,9 @@ import { hyperstache } from 'hyperstache/vite'
 export default defineConfig({
   plugins: [
     hyperstache({
-      entry: 'src/process.lua',
+      processes: {
+        main: { entry: 'src/process.lua' },
+      },
       luarocks: {
         dependencies: { lustache: '1.3.1-0' },
       },

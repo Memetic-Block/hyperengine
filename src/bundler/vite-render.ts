@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { randomBytes } from 'node:crypto'
 import type { Plugin, InlineConfig } from 'vite'
 import type { OutputBundle, OutputAsset, OutputChunk } from 'rollup'
-import type { ResolvedConfig } from '../config.js'
+import type { ResolvedProcessConfig } from '../config.js'
 import type { TemplateEntry } from './templates.js'
 
 // ---------------------------------------------------------------------------
@@ -164,7 +164,7 @@ function resolveAssetRef(
  */
 export async function renderTemplates(
   entries: TemplateEntry[],
-  config: ResolvedConfig,
+  config: ResolvedProcessConfig,
 ): Promise<TemplateEntry[]> {
   if (!config.templates.vite || entries.length === 0) {
     return entries

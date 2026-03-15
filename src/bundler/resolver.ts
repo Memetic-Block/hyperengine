@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { resolve, dirname, extname, relative, sep } from 'node:path'
-import type { ResolvedConfig } from '../config.js'
+import type { ResolvedProcessConfig } from '../config.js'
 
 export interface LuaModule {
   /** Module name used in require(), e.g. "handlers.home" */
@@ -68,7 +68,7 @@ export interface ResolveResult {
  * Searches in the entry directory and optionally lua_modules/.
  */
 export async function resolveModules(
-  config: ResolvedConfig,
+  config: ResolvedProcessConfig,
 ): Promise<ResolveResult> {
   const entryDir = dirname(config.entry)
   const searchPaths = [

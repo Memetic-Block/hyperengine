@@ -24,12 +24,14 @@ describe('collectTemplates', () => {
     const root = resolve(__dirname, 'fixtures/sample-app')
     const config = await resolveConfig(
       {
-        entry: 'src/process.lua',
+        processes: {
+          main: { entry: 'src/process.lua' },
+        },
       },
       root,
     )
 
-    const result = await collectTemplates(config)
+    const result = await collectTemplates(config.processes[0])
     expect(result.entries).toHaveLength(2)
 
     const keys = result.entries.map((e) => e.key).sort()

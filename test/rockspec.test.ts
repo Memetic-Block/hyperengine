@@ -6,7 +6,9 @@ describe('generateRockspec', () => {
   it('generates valid rockspec content', async () => {
     const config = await resolveConfig(
       {
-        entry: 'src/process.lua',
+        processes: {
+          main: { entry: 'src/process.lua' },
+        },
         luarocks: {
           dependencies: {
             lustache: '1.3.1-0',
@@ -27,7 +29,11 @@ describe('generateRockspec', () => {
 
   it('generates rockspec with no extra deps', async () => {
     const config = await resolveConfig(
-      { entry: 'src/process.lua' },
+      {
+        processes: {
+          main: { entry: 'src/process.lua' },
+        },
+      },
       '/fake/project',
     )
 

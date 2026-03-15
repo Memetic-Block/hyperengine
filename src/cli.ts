@@ -22,19 +22,38 @@ program
 
 program
   .command('build')
-  .description('Bundle the AO Lua process')
+  .description('Bundle AO Lua processes')
   .option('-r, --root <dir>', 'Project root directory', '.')
+  .option('-p, --process <name>', 'Bundle only the named process')
   .action(async (opts) => {
     const root = resolve(opts.root)
     const config = await loadConfig(root)
-    const result = await bundle(config)
 
-    const viteNote = result.viteProcessed ? ' (Vite processed)' : ''
-    console.log(`Bundled ${result.moduleCount} modules, ${result.templateCount} templates${viteNote}`)
-    console.log(`Output: ${result.outPath}`)
-
-    if (result.unresolved.length > 0) {
-      console.warn(`Unresolved modules: ${result.unresolved.join(', ')}`)
+    if (opts.process) {
+      const proc = config.processes.find(p => p.name === opts.process)
+      if (!proc) {
+        const names = config.processes.map(p => p.name).join(', ')
+        console.error(`Unknown process "${opts.process}". Available: ${names}`)
+        process.exit(1)
+      }
+      const { bundleProcess } = await import('./bundler/index.js')
+      const result = await bundleProcess(proc)
+      const viteNote = result.viteProcessed ? ' (Vite processed)' : ''
+      console.log(`[${result.processName}] Bundled ${result.moduleCount} modules, ${result.templateCount} templates${viteNote}`)
+      console.log(`[${result.processName}] Output: ${result.outPath}`)
+      if (result.unresolved.length > 0) {
+        console.warn(`[${result.processName}] Unresolved modules: ${result.unresolved.join(', ')}`)
+      }
+    } else {
+      const results = await bundle(config)
+      for (const result of results) {
+        const viteNote = result.viteProcessed ? ' (Vite processed)' : ''
+        console.log(`[${result.processName}] Bundled ${result.moduleCount} modules, ${result.templateCount} templates${viteNote}`)
+        console.log(`[${result.processName}] Output: ${result.outPath}`)
+        if (result.unresolved.length > 0) {
+          console.warn(`[${result.processName}] Unresolved modules: ${result.unresolved.join(', ')}`)
+        }
+      }
     }
   })
 
@@ -42,6 +61,7 @@ program
   .command('dev')
   .description('Start Vite dev server with hyperstache plugin')
   .option('-r, --root <dir>', 'Project root directory', '.')
+  .option('-p, --process <name>', 'Watch/bundle only the named process')
   .action(async (opts) => {
     const root = resolve(opts.root)
     const { createServer } = await import('vite')
@@ -50,7 +70,7 @@ program
 
     const server = await createServer({
       root,
-      plugins: [hyperstache(config)],
+      plugins: [hyperstache({ ...config, filterProcess: opts.process })],
     })
 
     await server.listen()

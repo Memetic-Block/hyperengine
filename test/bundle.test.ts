@@ -16,13 +16,17 @@ describe('bundle integration', () => {
   it('bundles sample app into a single Lua file', async () => {
     const config = await resolveConfig(
       {
-        entry: 'src/process.lua',
+        processes: {
+          main: { entry: 'src/process.lua' },
+        },
         outDir: 'dist',
       },
       fixtureRoot,
     )
 
-    const result = await bundle(config)
+    const results = await bundle(config)
+    expect(results).toHaveLength(1)
+    const result = results[0]
 
     // Should have entry + lib.utils
     expect(result.moduleCount).toBe(2)
@@ -47,5 +51,8 @@ describe('bundle integration', () => {
     // lustache and templates should be unresolved (external)
     // lustache is unresolved because it's not in the project
     expect(result.unresolved).toContain('lustache')
+
+    // Process name should be set
+    expect(result.processName).toBe('main')
   })
 })

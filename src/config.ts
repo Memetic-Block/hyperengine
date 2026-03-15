@@ -1,5 +1,5 @@
 import { readFile, mkdir, writeFile, stat } from 'node:fs/promises'
-import { resolve, dirname, join, extname } from 'node:path'
+import { resolve, dirname, join, extname, basename } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { UserConfig as ViteUserConfig } from 'vite'
 
@@ -14,34 +14,55 @@ export interface ViteTemplateOptions {
   define?: ViteUserConfig['define']
 }
 
-export interface HyperstacheConfig {
-  /** Lua entry point, e.g. "src/process.lua" */
-  entry: string
-  /** Output directory (default: "dist") */
-  outDir?: string
-  /** Output filename (default: "process.lua") */
-  outFile?: string
-  templates?: {
-    /** File extensions treated as mustache templates (default: [ '.html', '.htm', '.tmpl', '.mustache', '.mst', '.mu', '.stache' ]) */
-    extensions?: string[]
-    /** Directory to scan for templates (default: auto-discover from entry dir) */
-    dir?: string
-    /** Enable Vite processing of templates. `true` for defaults, or pass options. */
-    vite?: boolean | ViteTemplateOptions
-  }
-  luarocks?: {
-    /** Luarocks dependencies, e.g. { lustache: "1.3.1-0" } */
-    dependencies?: Record<string, string>
-    /** Lua version for rockspec (default: "5.3") */
-    luaVersion?: string
-  }
+export interface TemplateConfig {
+  /** File extensions treated as mustache templates (default: [ '.html', '.htm', '.tmpl', '.mustache', '.mst', '.mu', '.stache' ]) */
+  extensions?: string[]
+  /** Directory to scan for templates (default: auto-discover from entry dir) */
+  dir?: string
+  /** Enable Vite processing of templates. `true` for defaults, or pass options. */
+  vite?: boolean | ViteTemplateOptions
 }
 
-export interface ResolvedConfig {
-  root: string
+export interface LuarocksConfig {
+  /** Luarocks dependencies, e.g. { lustache: "1.3.1-0" } */
+  dependencies?: Record<string, string>
+  /** Lua version for rockspec (default: "5.3") */
+  luaVersion?: string
+}
+
+export interface ProcessConfig {
+  /** Lua entry point, e.g. "src/process.lua" */
   entry: string
+  /** Output filename (default: derived from entry filename) */
+  outFile?: string
+  /** Per-process template overrides */
+  templates?: TemplateConfig
+  /** Per-process luarocks overrides */
+  luarocks?: LuarocksConfig
+}
+
+export interface HyperstacheConfig {
+  /** Named process definitions */
+  processes: Record<string, ProcessConfig>
+  /** Output directory (default: "dist") */
+  outDir?: string
+  /** Shared template defaults for all processes */
+  templates?: TemplateConfig
+  /** Shared luarocks defaults for all processes */
+  luarocks?: LuarocksConfig
+}
+
+export interface ResolvedProcessConfig {
+  /** Process name (key from processes map) */
+  name: string
+  /** Absolute path to the Lua entry point */
+  entry: string
+  /** Absolute path to the output directory */
   outDir: string
+  /** Output filename */
   outFile: string
+  /** Absolute path to the project root */
+  root: string
   templates: {
     extensions: string[]
     dir: string
@@ -52,6 +73,18 @@ export interface ResolvedConfig {
     luaVersion: string
   }
 }
+
+export interface ResolvedConfig {
+  root: string
+  outDir: string
+  processes: ResolvedProcessConfig[]
+  luarocks: {
+    dependencies: Record<string, string>
+    luaVersion: string
+  }
+}
+
+const DEFAULT_EXTENSIONS = ['.html', '.htm', '.tmpl', '.mustache', '.mst', '.mu', '.stache']
 
 const CONFIG_FILES = [
   'hyperstache.config.ts',
@@ -69,30 +102,93 @@ async function resolveTemplatesDir(root: string, entryDir: string, configDir?: s
   return entryDir
 }
 
+function resolveViteOpts(raw: boolean | ViteTemplateOptions | undefined): ViteTemplateOptions | false {
+  if (raw === true) return {}
+  if (raw === false || raw == null) return false
+  return raw
+}
+
+function mergeTemplateConfig(
+  shared: TemplateConfig | undefined,
+  process: TemplateConfig | undefined,
+): TemplateConfig {
+  return {
+    extensions: process?.extensions ?? shared?.extensions,
+    dir: process?.dir ?? shared?.dir,
+    vite: process?.vite ?? shared?.vite,
+  }
+}
+
+function mergeLuarocksConfig(
+  shared: LuarocksConfig | undefined,
+  process: LuarocksConfig | undefined,
+): LuarocksConfig {
+  return {
+    dependencies: { ...shared?.dependencies, ...process?.dependencies },
+    luaVersion: process?.luaVersion ?? shared?.luaVersion,
+  }
+}
+
 export async function resolveConfig(
   raw: HyperstacheConfig,
   root: string,
 ): Promise<ResolvedConfig> {
-  const entry = resolve(root, raw.entry)
-  const entryDir = dirname(entry)
+  const entries = Object.entries(raw.processes)
+  if (entries.length === 0) {
+    throw new Error('At least one process must be defined in "processes".')
+  }
 
-  const rawVite = raw.templates?.vite
-  const viteOpts: ViteTemplateOptions | false =
-    rawVite === true ? {} : rawVite === false || rawVite == null ? false : rawVite
+  const outDir = resolve(root, raw.outDir ?? 'dist')
+
+  const processes: ResolvedProcessConfig[] = await Promise.all(
+    entries.map(async ([name, proc]) => {
+      const entry = resolve(root, proc.entry)
+      const entryDir = dirname(entry)
+
+      const mergedTemplates = mergeTemplateConfig(raw.templates, proc.templates)
+      const mergedLuarocks = mergeLuarocksConfig(raw.luarocks, proc.luarocks)
+
+      const defaultOutFile = basename(proc.entry, '.lua') + '.lua'
+
+      return {
+        name,
+        entry,
+        outDir,
+        outFile: proc.outFile ?? defaultOutFile,
+        root,
+        templates: {
+          extensions: mergedTemplates.extensions ?? DEFAULT_EXTENSIONS,
+          dir: await resolveTemplatesDir(root, entryDir, mergedTemplates.dir),
+          vite: resolveViteOpts(mergedTemplates.vite),
+        },
+        luarocks: {
+          dependencies: mergedLuarocks.dependencies ?? {},
+          luaVersion: mergedLuarocks.luaVersion ?? '5.3',
+        },
+      }
+    }),
+  )
+
+  // Merge all process luarocks deps for the top-level config
+  const allDeps: Record<string, string> = {}
+  for (const proc of processes) {
+    for (const [pkg, ver] of Object.entries(proc.luarocks.dependencies)) {
+      if (allDeps[pkg] && allDeps[pkg] !== ver) {
+        throw new Error(
+          `Conflicting luarocks dependency versions for "${pkg}": "${allDeps[pkg]}" vs "${ver}" (process "${proc.name}").`,
+        )
+      }
+      allDeps[pkg] = ver
+    }
+  }
 
   return {
     root,
-    entry,
-    outDir: resolve(root, raw.outDir ?? 'dist'),
-    outFile: raw.outFile ?? 'process.lua',
-    templates: {
-      extensions: raw.templates?.extensions ?? [ '.html', '.htm', '.tmpl', '.mustache', '.mst', '.mu', '.stache' ],
-      dir: await resolveTemplatesDir(root, entryDir, raw.templates?.dir),
-      vite: viteOpts,
-    },
+    outDir,
+    processes,
     luarocks: {
-      dependencies: raw.luarocks?.dependencies ?? {},
-      luaVersion: raw.luarocks?.luaVersion ?? '5.3',
+      dependencies: allDeps,
+      luaVersion: processes[0].luarocks.luaVersion,
     },
   }
 }

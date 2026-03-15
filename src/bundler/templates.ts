@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { resolve, relative } from 'node:path'
 import fg from 'fast-glob'
-import type { ResolvedConfig } from '../config.js'
+import type { ResolvedProcessConfig } from '../config.js'
 
 export interface TemplateEntry {
   /** Relative key used in the templates table, e.g. "index.html" */
@@ -37,7 +37,7 @@ export function toLuaLongString(content: string): string {
  * Collect all template files and generate a Lua module source string.
  */
 export async function collectTemplates(
-  config: ResolvedConfig,
+  config: ResolvedProcessConfig,
 ): Promise<{ entries: TemplateEntry[]; luaSource: string }> {
   const patterns = config.templates.extensions.map(
     (ext) => `**/*${ext}`,
