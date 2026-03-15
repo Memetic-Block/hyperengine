@@ -43,6 +43,8 @@ export interface AosConfig {
 export interface ProcessConfig {
   /** Lua entry point, e.g. "src/process.lua" */
   entry: string
+  /** Artifact type: 'process' (default) or 'module' (dynamic read module, skips aos build) */
+  type?: 'process' | 'module'
   /** Output filename (default: derived from entry filename) */
   outFile?: string
   /** Per-process template overrides */
@@ -71,6 +73,8 @@ export interface HyperstacheConfig {
 export interface ResolvedProcessConfig {
   /** Process name (key from processes map) */
   name: string
+  /** Artifact type: 'process' or 'module' (dynamic read module) */
+  type: 'process' | 'module'
   /** Absolute path to the Lua entry point */
   entry: string
   /** Absolute path to the output directory */
@@ -197,6 +201,7 @@ export async function resolveConfig(
 
       return {
         name,
+        type: proc.type ?? 'process',
         entry,
         outDir,
         outFile: proc.outFile ?? defaultOutFile,

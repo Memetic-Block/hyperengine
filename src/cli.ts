@@ -41,7 +41,8 @@ program
       const viteNote = result.viteProcessed ? ' (Vite processed)' : ''
       const runtimeNote = result.runtimeIncluded ? ' +runtime' : ''
       const aosNote = result.aosModule ? ' +aos module' : ''
-      console.log(`[${result.processName}] Bundled ${result.moduleCount} modules, ${result.templateCount} templates${viteNote}${runtimeNote}${aosNote}`)
+      const moduleNote = result.type === 'module' ? ' +module' : ''
+      console.log(`[${result.processName}] Bundled ${result.moduleCount} modules, ${result.templateCount} templates${viteNote}${runtimeNote}${aosNote}${moduleNote}`)
       console.log(`[${result.processName}] Output: ${result.outPath}`)
       if (result.aosCopiedFiles.length > 0) {
         console.log(`[${result.processName}] aos files: ${result.aosCopiedFiles.join(', ')}`)
@@ -55,7 +56,8 @@ program
         const viteNote = result.viteProcessed ? ' (Vite processed)' : ''
         const runtimeNote = result.runtimeIncluded ? ' +runtime' : ''
         const aosNote = result.aosModule ? ' +aos module' : ''
-        console.log(`[${result.processName}] Bundled ${result.moduleCount} modules, ${result.templateCount} templates${viteNote}${runtimeNote}${aosNote}`)
+        const moduleNote = result.type === 'module' ? ' +module' : ''
+        console.log(`[${result.processName}] Bundled ${result.moduleCount} modules, ${result.templateCount} templates${viteNote}${runtimeNote}${aosNote}${moduleNote}`)
         console.log(`[${result.processName}] Output: ${result.outPath}`)
         if (result.aosCopiedFiles.length > 0) {
           console.log(`[${result.processName}] aos files: ${result.aosCopiedFiles.join(', ')}`)

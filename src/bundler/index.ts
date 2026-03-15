@@ -31,6 +31,8 @@ export interface BundleResult {
   viteProcessed: boolean
   /** Whether the hyperstache runtime module is included */
   runtimeIncluded: boolean
+  /** Artifact type: 'process' or 'module' */
+  type: 'process' | 'module'
   /** Whether this was built as an aos module */
   aosModule: boolean
   /** Files copied from the aos repo (when aosModule is true) */
@@ -82,21 +84,24 @@ export async function bundleProcess(
   }
 
   // 5. Emit bundle
-  const output = aos.enabled
+  // Modules always use raw emitBundle (no _init wrapper), even when aos is enabled
+  const isModule = process.type === 'module'
+  const useAos = aos.enabled && !isModule
+  const output = useAos
     ? emitModule(modules, templatesSource, runtimeSource, process.runtime.handlers)
     : emitBundle(modules, templatesSource, runtimeSource, process.runtime.handlers)
 
   // 6. Determine output paths
-  // When aos is enabled with multiple processes, nest under processName subdir
-  const processOutDir = aos.enabled ? resolve(process.outDir, process.name) : process.outDir
-  const outFile = aos.enabled ? `${process.name}.lua` : process.outFile
+  // When aos is enabled (for processes only), nest under processName subdir
+  const processOutDir = useAos ? resolve(process.outDir, process.name) : process.outDir
+  const outFile = useAos ? `${process.name}.lua` : process.outFile
   const outPath = resolve(processOutDir, outFile)
   await mkdir(dirname(outPath), { recursive: true })
   await writeFile(outPath, output, 'utf-8')
 
-  // 7. Handle aos module output: clone repo, copy files, inject require
+  // 7. Handle aos module output: clone repo, copy files, inject require (processes only)
   let aosCopiedFiles: string[] = []
-  if (aos.enabled) {
+  if (useAos) {
     const repoPath = await ensureAosRepo(aos.commit, process.root)
     aosCopiedFiles = await copyAosProcessFiles(repoPath, processOutDir)
     const aosProcessLua = resolve(processOutDir, 'process.lua')
@@ -105,6 +110,7 @@ export async function bundleProcess(
 
   return {
     processName: process.name,
+    type: process.type,
     output,
     outPath,
     unresolved,
@@ -112,7 +118,7 @@ export async function bundleProcess(
     templateCount: entries.length,
     viteProcessed: viteEnabled && entries.length > 0,
     runtimeIncluded: process.runtime.enabled,
-    aosModule: aos.enabled,
+    aosModule: useAos,
     aosCopiedFiles,
   }
 }

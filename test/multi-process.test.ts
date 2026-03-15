@@ -127,6 +127,37 @@ describe('resolveConfig multi-process', () => {
       ),
     ).rejects.toThrow('Conflicting luarocks dependency versions')
   })
+
+  it('defaults type to process', async () => {
+    const config = await resolveConfig(
+      {
+        processes: {
+          main: { entry: 'src/process.lua' },
+        },
+      },
+      '/fake/project',
+    )
+
+    expect(config.processes[0].type).toBe('process')
+  })
+
+  it('accepts explicit type module', async () => {
+    const config = await resolveConfig(
+      {
+        processes: {
+          main: { entry: 'src/process.lua' },
+          reader: { entry: 'src/reader.lua', type: 'module' },
+        },
+      },
+      '/fake/project',
+    )
+
+    const main = config.processes.find(p => p.name === 'main')!
+    const reader = config.processes.find(p => p.name === 'reader')!
+
+    expect(main.type).toBe('process')
+    expect(reader.type).toBe('module')
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -195,5 +226,65 @@ describe('multi-process bundling', () => {
     expect(result.moduleCount).toBe(2) // lib.utils + worker entry
     expect(result.output).toContain('_modules["lib.utils"]')
     expect(result.output).toContain("require('lib.utils')")
+  })
+
+  it('bundles module-type artifact with raw emitBundle output', async () => {
+    const config = await resolveConfig(
+      {
+        processes: {
+          main: { entry: 'src/process.lua' },
+          reader: { entry: 'src/reader.lua', type: 'module' },
+        },
+      },
+      fixtureRoot,
+    )
+
+    const results = await bundle(config)
+    const reader = results.find(r => r.processName === 'reader')!
+
+    // Should use raw emitBundle (no _init wrapper)
+    expect(reader.output).toContain('-- Bundled by hyperstache')
+    expect(reader.output).toContain('local _modules = {}')
+    expect(reader.output).not.toContain('local function _init()')
+    expect(reader.output).not.toContain('return {}')
+
+    // Type metadata should be set
+    expect(reader.type).toBe('module')
+
+    // Should not be flagged as aos
+    expect(reader.aosModule).toBe(false)
+    expect(reader.aosCopiedFiles).toEqual([])
+
+    // Should resolve its module
+    expect(reader.moduleCount).toBe(2) // lib.utils + reader entry
+    expect(reader.output).toContain('_modules["lib.utils"]')
+  })
+
+  it('module-type skips aos even when aos config is present', async () => {
+    const config = await resolveConfig(
+      {
+        processes: {
+          main: { entry: 'src/process.lua' },
+          reader: { entry: 'src/reader.lua', type: 'module' },
+        },
+        aos: { commit: 'abc1234' },
+      },
+      fixtureRoot,
+    )
+
+    // Only bundle the reader (skip main to avoid needing real aos repo)
+    const readerProc = config.processes.find(p => p.name === 'reader')!
+    const result = await bundleProcess(readerProc, config.aos)
+
+    // Raw output, no _init wrapper
+    expect(result.output).toContain('-- Bundled by hyperstache')
+    expect(result.output).not.toContain('local function _init()')
+
+    // AOS completely skipped
+    expect(result.aosModule).toBe(false)
+    expect(result.aosCopiedFiles).toEqual([])
+
+    // Should output directly to outDir, not nested under processName/
+    expect(result.outPath).toBe(resolve(fixtureRoot, 'dist', 'reader.lua'))
   })
 })

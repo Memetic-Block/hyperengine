@@ -175,6 +175,32 @@ export default defineConfig({
 
 Running `hyperstache build` bundles all processes in parallel, producing `dist/process.lua` and `dist/worker.lua`.
 
+### Dynamic Read Modules
+
+Not every output artifact is a process. Set `type: 'module'` to mark an entry as a **dynamic read module** — a standalone Lua bundle that is not an AO process:
+
+```ts
+export default defineConfig({
+  processes: {
+    main: { entry: 'src/process.lua' },
+    reader: { entry: 'src/reader.lua', type: 'module' },
+  },
+  aos: { commit: 'abc1234' },
+  luarocks: {
+    dependencies: { lustache: '1.3.1-0' },
+  },
+})
+```
+
+Module-type artifacts:
+
+- Use the **raw bundle format** (no `_init()` wrapper), identical to a standard non-AOS build
+- **Skip the AOS build entirely** — no repo clone, no file copy, no `require()` injection — even when the project has `aos` configured
+- Output directly to `dist/reader.lua` instead of nesting under a subdirectory
+- Support all the same features as processes: templates, luarocks, runtime
+
+The default type is `'process'`, so existing configs are unaffected.
+
 ### Per-Process Overrides
 
 Each process inherits top-level `templates` and `luarocks` settings, but can override them:
@@ -407,12 +433,14 @@ export default defineConfig({
 })
 ```
 
-When `aos` is set, the build changes:
+When `aos` is set, the build changes for `type: 'process'` entries (the default):
 
 1. **Clones the aos repo** at the specified commit from `https://github.com/permaweb/aos`
 2. **Copies all `.lua` files** from the repo's `process/` directory into your output
 3. **Wraps your bundle as a module** — your bundled Lua is output as `{processName}.lua` instead of `process.lua`, wrapped so all side effects (handler registration, etc.) execute on `require()`
 4. **Injects `require("{processName}")`** into the copied `process.lua` after the last `Handlers.add`/`Handlers.append` call
+
+Entries with `type: 'module'` are **not affected** by the `aos` option — they always produce a raw bundle output without any AOS integration.
 
 The result is a directory structure compatible with `ao cli build`:
 
@@ -512,6 +540,7 @@ export default defineConfig({
   processes: {
     main: {
       entry: 'src/process.lua',    // Lua entry point (required)
+      type: 'process',             // 'process' (default) or 'module'
       outFile: 'process.lua',      // Output filename (default: derived from entry)
       templates: { /* ... */ },     // Per-process template overrides
       luarocks: { /* ... */ },      // Per-process luarocks overrides
@@ -579,6 +608,9 @@ The plugin:
 interface HyperstacheConfig {
   /** Lua entry point */
   entry: string
+
+  /** Artifact type: 'process' (default) or 'module' (dynamic read module, skips aos build) */
+  type?: 'process' | 'module'
 
   /** Output directory (default: 'dist') */
   outDir?: string
