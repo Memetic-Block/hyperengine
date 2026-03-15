@@ -290,6 +290,103 @@ If a `vite.config.ts` exists in your project root, it will be auto-detected and 
 
 Only `.html` templates are processed through Vite. Other template formats (`.htm`, `.tmpl`, `.mustache`, etc.) pass through unchanged.
 
+## Runtime Template Management
+
+Hyperstache includes an optional Lua runtime module for managing templates after a process has been deployed. Enable it with `runtime: true` in your config:
+
+```ts
+import { defineConfig } from 'hyperstache'
+
+export default defineConfig({
+  processes: {
+    main: { entry: 'src/process.lua' },
+  },
+  runtime: true,
+  luarocks: {
+    dependencies: { lustache: '1.3.1-0' },
+  },
+})
+```
+
+This bundles a `hyperstache` module that you can require in your Lua process:
+
+```lua
+local hs = require('hyperstache')
+
+-- Render a bundled template
+local html = hs.render('index.html', { title = 'Hello' })
+
+-- Add or update a template at runtime
+hs.set('banner.html', '<div class="banner">{{message}}</div>')
+
+-- Retrieve raw template content
+local tmpl = hs.get('banner.html')
+
+-- List all template keys
+local keys = hs.list()
+
+-- Remove a template
+hs.remove('old.html')
+
+-- Force re-seed from bundled templates (overwrites runtime changes)
+hs.sync()
+```
+
+The runtime module:
+
+- **Seeds from build-time templates** — On first load, all bundled templates are copied into the runtime store. On redeployment, new bundled templates merge in without overwriting runtime modifications.
+- **Persists across reloads** — State is stored in the lowercase global `hyperstache_templates`, which AO auto-persists across process reloads.
+- **Integrates with lustache** — `hs.render(key, data)` calls `lustache:render()` directly.
+
+### AO Message Handlers
+
+Enable `runtime: { handlers: true }` to auto-register AO message handlers for remote template management:
+
+```ts
+export default defineConfig({
+  processes: {
+    main: { entry: 'src/process.lua' },
+  },
+  runtime: { handlers: true },
+  luarocks: {
+    dependencies: { lustache: '1.3.1-0' },
+  },
+})
+```
+
+This registers five handlers:
+
+| Action               | Tags         | Description                       | Access  |
+|----------------------|--------------|-----------------------------------|---------|
+| `Hyperstache.Get`    | `Key`        | Returns raw template content      | Anyone  |
+| `Hyperstache.List`   |              | Returns all template keys         | Anyone  |
+| `Hyperstache.Render` | `Key`        | Renders template with `msg.Data`  | Anyone  |
+| `Hyperstache.Set`    | `Key`        | Creates/updates a template        | Owner   |
+| `Hyperstache.Remove` | `Key`        | Deletes a template                | Owner   |
+
+Mutation operations (`Set`, `Remove`) are guarded by an `msg.From == Owner` check.
+
+You can also register handlers manually from your process code:
+
+```lua
+local hs = require('hyperstache')
+hs.handlers()  -- registers all five handlers
+```
+
+### Per-Process Runtime Override
+
+Like templates and luarocks, the `runtime` option can be set per-process:
+
+```ts
+export default defineConfig({
+  processes: {
+    main: { entry: 'src/process.lua', runtime: { handlers: true } },
+    worker: { entry: 'src/worker.lua', runtime: false },
+  },
+  runtime: true,
+})
+```
+
 ## Project Structure
 
 ```
@@ -359,6 +456,7 @@ export default defineConfig({
       outFile: 'process.lua',      // Output filename (default: derived from entry)
       templates: { /* ... */ },     // Per-process template overrides
       luarocks: { /* ... */ },      // Per-process luarocks overrides
+      runtime: true,                // Per-process runtime override
     },
   },
 
@@ -377,6 +475,9 @@ export default defineConfig({
     dependencies: { lustache: '1.3.1-0' },
     luaVersion: '5.3',
   },
+
+  // Runtime template management module (default: disabled)
+  runtime: true,               // or { handlers: true } to auto-register AO handlers
 })
 ```
 
@@ -441,6 +542,12 @@ interface HyperstacheConfig {
     /** Lua version for the rockspec (default: '5.3') */
     luaVersion?: string
   }
+
+  /** Include the hyperstache runtime module for post-deploy template management */
+  runtime?: boolean | {
+    /** Auto-register AO message handlers for template CRUD */
+    handlers?: boolean
+  }
 }
 ```
 
@@ -449,7 +556,7 @@ interface HyperstacheConfig {
 1. **Resolve** — Parses `require()` calls from the entry Lua file, recursively resolves modules from the project source tree and `lua_modules/` (luarocks local install)
 2. **Collect** — Globs template files, reads them, wraps each in Lua long-string brackets
 3. **Render** *(optional)* — If `templates.vite` is enabled, processes `.html` templates through Vite: escapes Mustache syntax, runs Vite build to compile and inline CSS/JS assets, restores Mustache syntax
-4. **Emit** — Wraps each module in a function, generates a `require`-compatible loader, inlines templates as a virtual `require('templates')` module, and appends the entry point source
+4. **Emit** — Wraps each module in a function, generates a `require`-compatible loader, inlines templates as a virtual `require('templates')` module, optionally includes the `require('hyperstache')` runtime module, and appends the entry point source
 5. **Output** — Writes a single flat `.lua` file to `outDir/outFile`
 
 The output is self-contained and runs in AO's Lua runtime without external dependencies.

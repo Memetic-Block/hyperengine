@@ -106,8 +106,8 @@ export async function resolveModules(
 
     const filePath = await tryResolve(moduleName)
     if (!filePath) {
-      if (moduleName !== 'templates') {
-        // Only mark as unresolved if it's not the special "templates" module
+      if (moduleName !== 'templates' && moduleName !== 'hyperstache') {
+        // Only mark as unresolved if it's not an auto-generated module
         unresolved.add(moduleName)
       }
 

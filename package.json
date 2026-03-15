@@ -19,7 +19,8 @@
     "hyperstache": "./dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "src/lua"
   ],
   "scripts": {
     "build": "tsup",

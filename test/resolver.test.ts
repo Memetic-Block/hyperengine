@@ -48,3 +48,41 @@ describe('pathToModuleName', () => {
       .toBe('utils')
   })
 })
+
+describe('resolveModules', () => {
+  it('does not mark hyperstache as unresolved', async () => {
+    // Simulate a process that requires 'hyperstache' — it should be
+    // skipped like 'templates', not listed as unresolved.
+    const { resolveModules } = await import('../src/bundler/resolver.js')
+    const { resolve } = await import('node:path')
+    const fixtureRoot = resolve(__dirname, 'fixtures/sample-app')
+
+    const config = {
+      name: 'test',
+      entry: resolve(fixtureRoot, 'src/process.lua'),
+      outDir: resolve(fixtureRoot, 'dist'),
+      outFile: 'process.lua',
+      root: fixtureRoot,
+      templates: {
+        extensions: ['.html', '.htm'],
+        dir: resolve(fixtureRoot, 'src/templates'),
+        vite: false as const,
+      },
+      luarocks: {
+        dependencies: {},
+        luaVersion: '5.3',
+      },
+      runtime: {
+        enabled: true,
+        handlers: false,
+      },
+    }
+
+    const result = await resolveModules(config)
+
+    // The sample-app process requires 'templates' and 'lustache'
+    // — 'templates' and 'hyperstache' should both be skipped
+    expect(result.unresolved).not.toContain('templates')
+    expect(result.unresolved).not.toContain('hyperstache')
+  })
+})

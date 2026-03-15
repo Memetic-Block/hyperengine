@@ -54,5 +54,63 @@ describe('bundle integration', () => {
 
     // Process name should be set
     expect(result.processName).toBe('main')
+
+    // Runtime not included by default
+    expect(result.runtimeIncluded).toBe(false)
+  })
+
+  it('bundles with runtime module when enabled', async () => {
+    const config = await resolveConfig(
+      {
+        processes: {
+          main: { entry: 'src/process.lua' },
+        },
+        outDir: 'dist',
+        runtime: true,
+      },
+      fixtureRoot,
+    )
+
+    const results = await bundle(config)
+    expect(results).toHaveLength(1)
+    const result = results[0]
+
+    expect(result.runtimeIncluded).toBe(true)
+    expect(result.output).toContain('_modules["hyperstache"]')
+    expect(result.output).toContain('hyperstache_templates')
+    expect(result.output).toContain('function hyperstache.get(key)')
+    expect(result.output).toContain('function hyperstache.render(key, data)')
+
+    // Runtime module should appear after templates module
+    const templatesIdx = result.output.indexOf('_modules["templates"]')
+    const runtimeIdx = result.output.indexOf('_modules["hyperstache"]')
+    expect(runtimeIdx).toBeGreaterThan(templatesIdx)
+  })
+
+  it('auto-requires runtime when handlers mode is enabled', async () => {
+    const config = await resolveConfig(
+      {
+        processes: {
+          main: { entry: 'src/process.lua' },
+        },
+        outDir: 'dist',
+        runtime: { handlers: true },
+      },
+      fixtureRoot,
+    )
+
+    const results = await bundle(config)
+    const result = results[0]
+
+    expect(result.runtimeIncluded).toBe(true)
+
+    // Should auto-require in entry section
+    const entryIdx = result.output.indexOf('-- Entry point')
+    const afterEntry = result.output.slice(entryIdx)
+    expect(afterEntry).toContain('require("hyperstache")')
+
+    // Should auto-register handlers inside the module
+    expect(result.output).toContain('Handlers.add("Hyperstache.Get"')
+    expect(result.output).toContain('hyperstache.handlers()')
   })
 })

@@ -1,5 +1,16 @@
 import type { LuaModule } from './resolver.js'
 
+export interface EmitOptions {
+  /** Resolved Lua modules (entry module last) */
+  modules: LuaModule[]
+  /** Generated Lua source for the templates module, or null */
+  templatesLuaSource: string | null
+  /** Generated Lua source for the hyperstache runtime module, or null */
+  runtimeLuaSource?: string | null
+  /** Whether to auto-require the runtime module in the entry point */
+  autoRequireRuntime?: boolean
+}
+
 /**
  * Emit a single bundled Lua file from resolved modules and a templates module.
  *
@@ -9,6 +20,8 @@ import type { LuaModule } from './resolver.js'
 export function emitBundle(
   modules: LuaModule[],
   templatesLuaSource: string | null,
+  runtimeLuaSource?: string | null,
+  autoRequireRuntime?: boolean,
 ): string {
   const lines: string[] = []
 
@@ -39,6 +52,16 @@ export function emitBundle(
     lines.push('')
   }
 
+  // Runtime module (if any) — registered after templates so require('templates') resolves
+  if (runtimeLuaSource) {
+    lines.push('_modules["hyperstache"] = function()')
+    for (const line of runtimeLuaSource.split('\n')) {
+      lines.push(`  ${line}`)
+    }
+    lines.push('end')
+    lines.push('')
+  }
+
   // Find the entry module (last one in the array by convention)
   const entryModule = modules[modules.length - 1]
   const depModules = modules.slice(0, -1)
@@ -55,6 +78,9 @@ export function emitBundle(
 
   // Entry module runs directly (not wrapped)
   lines.push('-- Entry point')
+  if (autoRequireRuntime && runtimeLuaSource) {
+    lines.push('require("hyperstache")')
+  }
   lines.push(entryModule.source)
 
   return lines.join('\n')

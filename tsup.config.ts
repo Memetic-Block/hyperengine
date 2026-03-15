@@ -1,4 +1,6 @@
 import { defineConfig } from 'tsup'
+import { copyFileSync, mkdirSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 export default defineConfig({
   entry: {
@@ -19,4 +21,11 @@ export default defineConfig({
     'vite',
     'esbuild',
   ],
+  onSuccess: async () => {
+    // Copy Lua runtime files to dist/lua/ so they resolve via import.meta.url
+    const outDir = resolve('dist', 'lua')
+    mkdirSync(outDir, { recursive: true })
+    copyFileSync(resolve('src', 'lua', 'runtime.lua'), resolve(outDir, 'runtime.lua'))
+    copyFileSync(resolve('src', 'lua', 'runtime-handlers.lua'), resolve(outDir, 'runtime-handlers.lua'))
+  },
 })

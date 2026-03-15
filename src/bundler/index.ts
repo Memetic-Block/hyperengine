@@ -5,8 +5,9 @@ import { resolveModules } from './resolver.js'
 import { collectTemplates } from './templates.js'
 import { emitBundle } from './emit.js'
 import { renderTemplates } from './vite-render.js'
+import { generateRuntimeSource } from './runtime.js'
 
-export { resolveModules, collectTemplates, emitBundle, renderTemplates }
+export { resolveModules, collectTemplates, emitBundle, renderTemplates, generateRuntimeSource }
 export type { LuaModule, ResolveResult } from './resolver.js'
 export type { TemplateEntry } from './templates.js'
 export type { EscapeResult } from './vite-render.js'
@@ -26,6 +27,8 @@ export interface BundleResult {
   templateCount: number
   /** Whether templates were processed through Vite */
   viteProcessed: boolean
+  /** Whether the hyperstache runtime module is included */
+  runtimeIncluded: boolean
 }
 
 /**
@@ -58,10 +61,16 @@ export async function bundleProcess(process: ResolvedProcessConfig): Promise<Bun
     }
   }
 
-  // 4. Emit bundle
-  const output = emitBundle(modules, templatesSource)
+  // 4. Generate runtime module if enabled
+  let runtimeSource: string | null = null
+  if (process.runtime.enabled) {
+    runtimeSource = await generateRuntimeSource({ handlers: process.runtime.handlers })
+  }
 
-  // 5. Write output
+  // 5. Emit bundle
+  const output = emitBundle(modules, templatesSource, runtimeSource, process.runtime.handlers)
+
+  // 6. Write output
   const outPath = resolve(process.outDir, process.outFile)
   await mkdir(dirname(outPath), { recursive: true })
   await writeFile(outPath, output, 'utf-8')
@@ -74,6 +83,7 @@ export async function bundleProcess(process: ResolvedProcessConfig): Promise<Bun
     moduleCount: modules.length,
     templateCount: entries.length,
     viteProcessed: viteEnabled && entries.length > 0,
+    runtimeIncluded: process.runtime.enabled,
   }
 }
 

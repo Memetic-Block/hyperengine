@@ -30,6 +30,11 @@ export interface LuarocksConfig {
   luaVersion?: string
 }
 
+export interface RuntimeConfig {
+  /** Enable AO message handlers for template CRUD */
+  handlers?: boolean
+}
+
 export interface ProcessConfig {
   /** Lua entry point, e.g. "src/process.lua" */
   entry: string
@@ -39,6 +44,8 @@ export interface ProcessConfig {
   templates?: TemplateConfig
   /** Per-process luarocks overrides */
   luarocks?: LuarocksConfig
+  /** Per-process runtime module overrides */
+  runtime?: boolean | RuntimeConfig
 }
 
 export interface HyperstacheConfig {
@@ -50,6 +57,8 @@ export interface HyperstacheConfig {
   templates?: TemplateConfig
   /** Shared luarocks defaults for all processes */
   luarocks?: LuarocksConfig
+  /** Shared runtime module defaults for all processes */
+  runtime?: boolean | RuntimeConfig
 }
 
 export interface ResolvedProcessConfig {
@@ -71,6 +80,10 @@ export interface ResolvedProcessConfig {
   luarocks: {
     dependencies: Record<string, string>
     luaVersion: string
+  }
+  runtime: {
+    enabled: boolean
+    handlers: boolean
   }
 }
 
@@ -129,6 +142,16 @@ function mergeLuarocksConfig(
   }
 }
 
+function resolveRuntimeOpts(
+  shared: boolean | RuntimeConfig | undefined,
+  process: boolean | RuntimeConfig | undefined,
+): { enabled: boolean; handlers: boolean } {
+  const raw = process ?? shared
+  if (raw === true) return { enabled: true, handlers: false }
+  if (raw === false || raw == null) return { enabled: false, handlers: false }
+  return { enabled: true, handlers: raw.handlers ?? false }
+}
+
 export async function resolveConfig(
   raw: HyperstacheConfig,
   root: string,
@@ -165,6 +188,7 @@ export async function resolveConfig(
           dependencies: mergedLuarocks.dependencies ?? {},
           luaVersion: mergedLuarocks.luaVersion ?? '5.3',
         },
+        runtime: resolveRuntimeOpts(raw.runtime, proc.runtime),
       }
     }),
   )

@@ -54,4 +54,69 @@ describe('emitBundle', () => {
     expect(output).not.toContain('_modules["templates"]')
     expect(output).toContain('print("hello")')
   })
+
+  it('emits bundle with runtime module after templates', () => {
+    const modules: LuaModule[] = [
+      {
+        name: 'main',
+        path: '/fake/main.lua',
+        source: 'print("hello")',
+        dependencies: [],
+      },
+    ]
+
+    const templatesLua = `local _templates = {}\nreturn _templates`
+    const runtimeLua = `local hyperstache = {}\nreturn hyperstache`
+
+    const output = emitBundle(modules, templatesLua, runtimeLua)
+
+    // Both modules should be registered
+    expect(output).toContain('_modules["templates"]')
+    expect(output).toContain('_modules["hyperstache"]')
+
+    // Runtime should appear after templates
+    const templatesIdx = output.indexOf('_modules["templates"]')
+    const runtimeIdx = output.indexOf('_modules["hyperstache"]')
+    expect(runtimeIdx).toBeGreaterThan(templatesIdx)
+  })
+
+  it('auto-requires runtime when autoRequireRuntime is true', () => {
+    const modules: LuaModule[] = [
+      {
+        name: 'main',
+        path: '/fake/main.lua',
+        source: 'print("hello")',
+        dependencies: [],
+      },
+    ]
+
+    const runtimeLua = `local hyperstache = {}\nreturn hyperstache`
+
+    const output = emitBundle(modules, null, runtimeLua, true)
+
+    // Should have auto-require before entry point
+    const entryIdx = output.indexOf('-- Entry point')
+    const requireIdx = output.indexOf('require("hyperstache")', entryIdx)
+    expect(requireIdx).toBeGreaterThan(entryIdx)
+  })
+
+  it('does not auto-require runtime when autoRequireRuntime is false', () => {
+    const modules: LuaModule[] = [
+      {
+        name: 'main',
+        path: '/fake/main.lua',
+        source: 'print("hello")',
+        dependencies: [],
+      },
+    ]
+
+    const runtimeLua = `local hyperstache = {}\nreturn hyperstache`
+
+    const output = emitBundle(modules, null, runtimeLua, false)
+
+    // Should NOT have auto-require in the entry section
+    const entryIdx = output.indexOf('-- Entry point')
+    const afterEntry = output.slice(entryIdx)
+    expect(afterEntry).not.toContain('require("hyperstache")')
+  })
 })

@@ -39,7 +39,8 @@ program
       const { bundleProcess } = await import('./bundler/index.js')
       const result = await bundleProcess(proc)
       const viteNote = result.viteProcessed ? ' (Vite processed)' : ''
-      console.log(`[${result.processName}] Bundled ${result.moduleCount} modules, ${result.templateCount} templates${viteNote}`)
+      const runtimeNote = result.runtimeIncluded ? ' +runtime' : ''
+      console.log(`[${result.processName}] Bundled ${result.moduleCount} modules, ${result.templateCount} templates${viteNote}${runtimeNote}`)
       console.log(`[${result.processName}] Output: ${result.outPath}`)
       if (result.unresolved.length > 0) {
         console.warn(`[${result.processName}] Unresolved modules: ${result.unresolved.join(', ')}`)
@@ -48,7 +49,8 @@ program
       const results = await bundle(config)
       for (const result of results) {
         const viteNote = result.viteProcessed ? ' (Vite processed)' : ''
-        console.log(`[${result.processName}] Bundled ${result.moduleCount} modules, ${result.templateCount} templates${viteNote}`)
+        const runtimeNote = result.runtimeIncluded ? ' +runtime' : ''
+        console.log(`[${result.processName}] Bundled ${result.moduleCount} modules, ${result.templateCount} templates${viteNote}${runtimeNote}`)
         console.log(`[${result.processName}] Output: ${result.outPath}`)
         if (result.unresolved.length > 0) {
           console.warn(`[${result.processName}] Unresolved modules: ${result.unresolved.join(', ')}`)
