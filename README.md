@@ -8,6 +8,34 @@ Optionally, templates can be processed through Vite before bundling — CSS, Typ
 
 A single project can define multiple processes, each producing its own self-contained Lua bundle.
 
+## Table of Contents
+
+- [Prerequisites](#prerequisites)
+- [Install](#install)
+- [Quick Start](#quick-start)
+  - [Manual Setup](#manual-setup)
+- [Multiple Processes](#multiple-processes)
+  - [Dynamic Read Modules](#dynamic-read-modules)
+  - [Per-Process Overrides](#per-process-overrides)
+  - [Building a Specific Process](#building-a-specific-process)
+- [Vite Template Processing](#vite-template-processing)
+  - [Advanced Vite Options](#advanced-vite-options)
+- [Runtime Template Management](#runtime-template-management)
+  - [AO Message Handlers](#ao-message-handlers)
+  - [Per-Process Runtime Override](#per-process-runtime-override)
+- [AOS Module Build](#aos-module-build)
+  - [AOS Build Options](#aos-build-options)
+  - [Caching](#caching)
+  - [Requirements](#requirements)
+- [Project Structure](#project-structure)
+- [CLI](#cli)
+- [Configuration](#configuration)
+  - [Full Config Interface](#full-config-interface)
+- [Vite Plugin](#vite-plugin)
+- [How It Works](#how-it-works)
+- [Rockspec Generation](#rockspec-generation)
+- [License](#license)
+
 ## Prerequisites
 You will need [luarocks](https://luarocks.org/#quick-start) installed in order to resolve
 [lustache](https://luarocks.org/modules/luarocks/lustache) for rendering inside your AO process,
@@ -647,7 +675,7 @@ The plugin:
 - When `templates.vite` is enabled, also watches CSS/JS/TS files under the templates directory
 - Triggers a full-reload when Lua, template, or asset sources change
 
-## Config Reference
+### Full Config Interface
 
 ```ts
 interface HyperstacheConfig {
