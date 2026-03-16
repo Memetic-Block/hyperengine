@@ -42,6 +42,8 @@ export interface BundleResult {
   aosYamlPath: string | null
   /** Module names whose require() calls were stripped from process.lua */
   aosExcludedModules: string[]
+  /** Dependencies marked as external for Vite template processing */
+  viteExternals: (string | RegExp)[]
 }
 
 interface AosOpts {
@@ -132,6 +134,10 @@ export async function bundleProcess(
     })
   }
 
+  const viteExternals: (string | RegExp)[] = viteEnabled && process.templates.vite
+    ? (process.templates.vite as Exclude<typeof process.templates.vite, false>).external ?? []
+    : []
+
   return {
     processName: process.name,
     type: process.type,
@@ -146,6 +152,7 @@ export async function bundleProcess(
     aosCopiedFiles,
     aosYamlPath,
     aosExcludedModules,
+    viteExternals,
   }
 }
 

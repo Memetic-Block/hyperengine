@@ -228,6 +228,11 @@ export async function renderTemplates(
       css: viteOpts.css,
       resolve: viteOpts.resolve,
       define: viteOpts.define,
+      build: {
+        rollupOptions: {
+          external: viteOpts.external,
+        },
+      },
     }
 
     const forcedConfig: InlineConfig = {

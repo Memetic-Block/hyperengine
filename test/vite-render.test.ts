@@ -174,6 +174,76 @@ describe('renderTemplates', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Integration: renderTemplates with externals
+// ---------------------------------------------------------------------------
+
+describe('renderTemplates with externals', () => {
+  const fixtureRoot = resolve(__dirname, 'fixtures/vite-app')
+
+  it('keeps external CSS as <link> instead of inlining', async () => {
+    const config = await resolveConfig(
+      {
+        processes: {
+          main: { entry: 'src/process.lua' },
+        },
+        templates: { vite: { external: ['./styles.css'] } },
+      },
+      fixtureRoot,
+    )
+    const proc = config.processes[0]
+
+    const { entries } = await collectTemplates(proc)
+    const result = await renderTemplates(entries, proc)
+
+    const indexHtml = result.find((e) => e.key === 'index.html')
+    expect(indexHtml).toBeDefined()
+
+    // CSS should NOT be inlined — external means Rollup leaves it alone
+    expect(indexHtml!.content).not.toContain('<style>')
+    // Mustache expressions should still be preserved
+    expect(indexHtml!.content).toContain('{{title}}')
+  })
+
+  it('threads external config through resolveConfig', async () => {
+    const config = await resolveConfig(
+      {
+        processes: {
+          main: { entry: 'src/process.lua' },
+        },
+        templates: { vite: { external: ['lodash', /^@scope\//] } },
+      },
+      fixtureRoot,
+    )
+    const proc = config.processes[0]
+    const viteOpts = proc.templates.vite
+    expect(viteOpts).not.toBe(false)
+    if (viteOpts !== false) {
+      expect(viteOpts.external).toHaveLength(2)
+      expect(viteOpts.external![0]).toBe('lodash')
+      expect(viteOpts.external![1]).toBeInstanceOf(RegExp)
+    }
+  })
+
+  it('handles vite: true without external', async () => {
+    const config = await resolveConfig(
+      {
+        processes: {
+          main: { entry: 'src/process.lua' },
+        },
+        templates: { vite: true },
+      },
+      fixtureRoot,
+    )
+    const proc = config.processes[0]
+    const viteOpts = proc.templates.vite
+    expect(viteOpts).not.toBe(false)
+    if (viteOpts !== false) {
+      expect(viteOpts.external).toBeUndefined()
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Integration: full bundle with Vite templates
 // ---------------------------------------------------------------------------
 
@@ -212,5 +282,27 @@ describe('bundle with vite templates', () => {
     expect(result.output).toContain('{{username}}')
     // Module loader present
     expect(result.output).toContain('local _modules = {}')
+    // No externals configured
+    expect(result.viteExternals).toEqual([])
+  })
+
+  it('reports viteExternals in BundleResult', async () => {
+    const config = await resolveConfig(
+      {
+        processes: {
+          main: { entry: 'src/process.lua' },
+        },
+        outDir: 'dist',
+        templates: { vite: { external: ['./styles.css'] } },
+      },
+      fixtureRoot,
+    )
+
+    const results = await bundle(config)
+    expect(results).toHaveLength(1)
+    const result = results[0]
+
+    expect(result.viteExternals).toEqual(['./styles.css'])
+    expect(result.viteProcessed).toBe(true)
   })
 })

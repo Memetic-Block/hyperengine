@@ -12,6 +12,8 @@ export interface ViteTemplateOptions {
   resolve?: ViteUserConfig['resolve']
   /** Define global constant replacements */
   define?: ViteUserConfig['define']
+  /** Dependencies to treat as external (not bundled/inlined by Rollup) */
+  external?: (string | RegExp)[]
 }
 
 export interface TemplateConfig {

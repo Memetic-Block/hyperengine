@@ -23,6 +23,7 @@ Bundled artifacts may optionally be output as aos modules ready to be build into
   - [Building a Specific Process](#building-a-specific-process)
 - [Vite Template Processing](#vite-template-processing)
   - [Advanced Vite Options](#advanced-vite-options)
+  - [External Dependencies](#external-dependencies)
 - [Runtime Template Management](#runtime-template-management)
   - [AO Message Handlers](#ao-message-handlers)
   - [Per-Process Runtime Override](#per-process-runtime-override)
@@ -348,6 +349,32 @@ If a `vite.config.ts` exists in your project root, it will be auto-detected and 
 
 Only `.html` templates are processed through Vite. Other template formats (`.htm`, `.tmpl`, `.mustache`, etc.) pass through unchanged.
 
+### External Dependencies
+
+By default, Vite inlines all local CSS and JS assets into the HTML output. Use `external` to prevent specific dependencies from being bundled — Rollup will leave their imports untouched:
+
+```ts
+import { defineConfig } from 'hyperstache'
+
+export default defineConfig({
+  processes: {
+    main: { entry: 'src/process.lua' },
+  },
+  templates: {
+    vite: {
+      external: ['./styles.css', /^@vendor\//],
+    },
+  },
+  luarocks: {
+    dependencies: { lustache: '1.3.1-0' },
+  },
+})
+```
+
+The `external` array accepts strings and regular expressions, matching [Rollup's external option](https://rollupjs.org/configuration-options/#external). Matched imports are preserved as-is in the HTML output instead of being compiled and inlined.
+
+Configured externals are reported in the `BundleResult.viteExternals` array for programmatic consumers.
+
 ## Runtime Template Management
 
 Hyperstache includes an optional Lua runtime module for managing templates after a process has been deployed. Enable it with `runtime: true` in your config:
@@ -649,7 +676,7 @@ export default defineConfig({
   templates: {
     extensions: ['.html', '.htm', '.tmpl', '.mustache', '.mst', '.mu', '.stache'],
     dir: 'src/templates',           // Auto-detected from entry dir by default
-    vite: true,                     // or { plugins, css, resolve, define }
+    vite: true,                     // or { plugins, css, resolve, define, external }
   },
 
   // Shared luarocks defaults
@@ -730,6 +757,8 @@ interface HyperstacheConfig {
       css?: ViteCSSOptions
       resolve?: ViteResolveOptions
       define?: Record<string, string>
+      /** Dependencies to treat as external (not bundled/inlined by Rollup) */
+      external?: (string | RegExp)[]
     }
   }
 
