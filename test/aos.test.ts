@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { injectRequire, copyAosProcessFiles, generateAosYaml, writeAosYaml } from '../src/bundler/aos.js'
+import { injectRequire, copyAosProcessFiles, generateAosYaml, writeAosYaml, stripRequires } from '../src/bundler/aos.js'
 import { mkdir, writeFile, readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -37,8 +37,8 @@ describe('injectRequire', () => {
     const result = await readFile(filePath, 'utf-8')
     const lines = result.split('\n')
 
-    // require("main") should appear after the closing ) of the second Handlers.add
-    const requireIdx = lines.indexOf('require("main")')
+    // require(".main") should appear after the closing ) of the second Handlers.add
+    const requireIdx = lines.findIndex(l => l.trim() === 'require(".main")')
     expect(requireIdx).toBeGreaterThan(-1)
 
     // The second Handlers.add closing ) is on line index 8
@@ -68,10 +68,10 @@ describe('injectRequire', () => {
     await injectRequire(filePath, 'worker')
 
     const result = await readFile(filePath, 'utf-8')
-    expect(result).toContain('require("worker")')
+    expect(result).toContain('require(".worker")')
 
     const lines = result.split('\n')
-    const requireIdx = lines.indexOf('require("worker")')
+    const requireIdx = lines.findIndex(l => l.trim() === 'require(".worker")')
     // Should be after the closing paren at index 3
     expect(requireIdx).toBeGreaterThan(3)
   })
@@ -83,10 +83,10 @@ describe('injectRequire', () => {
     await injectRequire(filePath, 'mymod')
 
     const result = await readFile(filePath, 'utf-8')
-    expect(result).toContain('require("mymod")')
+    expect(result).toContain('require(".mymod")')
 
     const lines = result.split('\n')
-    const requireIdx = lines.indexOf('require("mymod")')
+    const requireIdx = lines.findIndex(l => l.trim() === 'require(".mymod")')
     expect(requireIdx).toBe(lines.length - 1)
   })
 
@@ -110,7 +110,7 @@ describe('injectRequire', () => {
 
     const result = await readFile(filePath, 'utf-8')
     const lines = result.split('\n')
-    const requireIdx = lines.indexOf('require("app")')
+    const requireIdx = lines.findIndex(l => l.trim() === 'require(".app")')
     expect(requireIdx).toBeGreaterThan(-1)
 
     // The closing ) of Handlers.add is at line 8
@@ -255,5 +255,142 @@ describe('writeAosYaml', () => {
 
     const content = await readFile(yamlPath, 'utf-8')
     expect(content).toContain("aos_git_hash: 'cafebabe'")
+  })
+})
+
+describe('stripRequires', () => {
+  let dir: string
+
+  beforeEach(async () => {
+    dir = join(tmpdir(), `hyperstache-strip-test-${Date.now()}`)
+    await mkdir(dir, { recursive: true })
+  })
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  it('removes a single require line', async () => {
+    const lua = [
+      'local x = 1',
+      'require(".crypto.init")',
+      'require(".main")',
+      'print("done")',
+    ].join('\n')
+
+    const filePath = join(dir, 'process.lua')
+    await writeFile(filePath, lua, 'utf-8')
+
+    const removed = await stripRequires(filePath, ['.crypto.init'])
+    expect(removed).toEqual(['.crypto.init'])
+
+    const result = await readFile(filePath, 'utf-8')
+    expect(result).not.toContain('.crypto.init')
+    expect(result).toContain('require(".main")')
+    expect(result).toContain('print("done")')
+  })
+
+  it('removes multiple require lines in one pass', async () => {
+    const lua = [
+      'require(".crypto.init")',
+      'require(".sqlite")',
+      'require(".main")',
+    ].join('\n')
+
+    const filePath = join(dir, 'process.lua')
+    await writeFile(filePath, lua, 'utf-8')
+
+    const removed = await stripRequires(filePath, ['.crypto.init', '.sqlite'])
+    expect(removed).toContain('.crypto.init')
+    expect(removed).toContain('.sqlite')
+    expect(removed).toHaveLength(2)
+
+    const result = await readFile(filePath, 'utf-8')
+    expect(result).not.toContain('.crypto.init')
+    expect(result).not.toContain('.sqlite')
+    expect(result).toContain('require(".main")')
+  })
+
+  it('handles single-quote require syntax', async () => {
+    const lua = "require('.crypto.init')\nrequire('.main')"
+    const filePath = join(dir, 'process.lua')
+    await writeFile(filePath, lua, 'utf-8')
+
+    const removed = await stripRequires(filePath, ['.crypto.init'])
+    expect(removed).toEqual(['.crypto.init'])
+
+    const result = await readFile(filePath, 'utf-8')
+    expect(result).not.toContain('.crypto.init')
+    expect(result).toContain("require('.main')")
+  })
+
+  it('handles bare require syntax without parentheses', async () => {
+    const lua = 'require ".crypto.init"\nrequire ".main"'
+    const filePath = join(dir, 'process.lua')
+    await writeFile(filePath, lua, 'utf-8')
+
+    const removed = await stripRequires(filePath, ['.crypto.init'])
+    expect(removed).toEqual(['.crypto.init'])
+
+    const result = await readFile(filePath, 'utf-8')
+    expect(result).not.toContain('.crypto.init')
+    expect(result).toContain('require ".main"')
+  })
+
+  it('normalises names without leading dot', async () => {
+    const lua = 'require(".crypto.init")\nrequire(".main")'
+    const filePath = join(dir, 'process.lua')
+    await writeFile(filePath, lua, 'utf-8')
+
+    const removed = await stripRequires(filePath, ['crypto.init'])
+    expect(removed).toEqual(['.crypto.init'])
+
+    const result = await readFile(filePath, 'utf-8')
+    expect(result).not.toContain('.crypto.init')
+  })
+
+  it('returns only modules that were actually found', async () => {
+    const lua = 'require(".main")\nprint("hi")'
+    const filePath = join(dir, 'process.lua')
+    await writeFile(filePath, lua, 'utf-8')
+
+    const removed = await stripRequires(filePath, ['.crypto.init', '.sqlite'])
+    expect(removed).toEqual([])
+
+    const result = await readFile(filePath, 'utf-8')
+    expect(result).toContain('require(".main")')
+  })
+
+  it('leaves file unchanged when no matches', async () => {
+    const lua = 'local x = 1\nrequire(".main")'
+    const filePath = join(dir, 'process.lua')
+    await writeFile(filePath, lua, 'utf-8')
+
+    await stripRequires(filePath, ['.nonexistent'])
+
+    const result = await readFile(filePath, 'utf-8')
+    expect(result).toBe(lua)
+  })
+
+  it('returns empty array when given empty exclude list', async () => {
+    const lua = 'require(".crypto.init")'
+    const filePath = join(dir, 'process.lua')
+    await writeFile(filePath, lua, 'utf-8')
+
+    const removed = await stripRequires(filePath, [])
+    expect(removed).toEqual([])
+  })
+
+  it('handles indented require lines', async () => {
+    const lua = '  require(".crypto.init")\n  require(".main")'
+    const filePath = join(dir, 'process.lua')
+    await writeFile(filePath, lua, 'utf-8')
+
+    const removed = await stripRequires(filePath, ['.crypto.init'])
+    expect(removed).toEqual(['.crypto.init'])
+
+    const result = await readFile(filePath, 'utf-8')
+    expect(result).not.toContain('.crypto.init')
+    expect(result).toContain('require(".main")')
   })
 })

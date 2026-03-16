@@ -6,10 +6,10 @@ import { collectTemplates } from './templates.js'
 import { emitBundle, emitModule } from './emit.js'
 import { renderTemplates } from './vite-render.js'
 import { generateRuntimeSource } from './runtime.js'
-import { ensureAosRepo, copyAosProcessFiles, injectRequire, writeAosYaml } from './aos.js'
+import { ensureAosRepo, copyAosProcessFiles, injectRequire, stripRequires, writeAosYaml } from './aos.js'
 
 export { resolveModules, collectTemplates, emitBundle, emitModule, renderTemplates, generateRuntimeSource }
-export { ensureAosRepo, copyAosProcessFiles, injectRequire, generateAosYaml, writeAosYaml } from './aos.js'
+export { ensureAosRepo, copyAosProcessFiles, injectRequire, stripRequires, generateAosYaml, writeAosYaml } from './aos.js'
 export type { AosYamlOptions } from './aos.js'
 export type { LuaModule, ResolveResult } from './resolver.js'
 export type { TemplateEntry } from './templates.js'
@@ -40,6 +40,8 @@ export interface BundleResult {
   aosCopiedFiles: string[]
   /** Path to the generated YAML config file (when aosModule is true) */
   aosYamlPath: string | null
+  /** Module names whose require() calls were stripped from process.lua */
+  aosExcludedModules: string[]
 }
 
 interface AosOpts {
@@ -51,6 +53,7 @@ interface AosOpts {
   target: 32 | 64
   compute_limit: string
   module_format: string
+  exclude: string[]
 }
 
 /**
@@ -58,7 +61,7 @@ interface AosOpts {
  */
 export async function bundleProcess(
   process: ResolvedProcessConfig,
-  aos: AosOpts = { enabled: false, commit: '', stack_size: 3_145_728, initial_memory: 4_194_304, maximum_memory: 1_073_741_824, target: 32, compute_limit: '9000000000000', module_format: 'wasm32-unknown-emscripten-metering' },
+  aos: AosOpts = { enabled: false, commit: '', stack_size: 3_145_728, initial_memory: 4_194_304, maximum_memory: 1_073_741_824, target: 32, compute_limit: '9000000000000', module_format: 'wasm32-unknown-emscripten-metering', exclude: [] },
 ): Promise<BundleResult> {
   // 1. Resolve Lua modules
   const { modules, unresolved } = await resolveModules(process)
@@ -111,11 +114,13 @@ export async function bundleProcess(
   // 7. Handle aos module output: clone repo, copy files, inject require, write YAML (processes only)
   let aosCopiedFiles: string[] = []
   let aosYamlPath: string | null = null
+  let aosExcludedModules: string[] = []
   if (useAos) {
     const repoPath = await ensureAosRepo(aos.commit, process.root)
     aosCopiedFiles = await copyAosProcessFiles(repoPath, processOutDir)
     const aosProcessLua = resolve(processOutDir, 'process.lua')
     await injectRequire(aosProcessLua, process.name)
+    aosExcludedModules = await stripRequires(aosProcessLua, aos.exclude)
     aosYamlPath = await writeAosYaml(processOutDir, {
       stack_size: aos.stack_size,
       initial_memory: aos.initial_memory,
@@ -140,6 +145,7 @@ export async function bundleProcess(
     aosModule: useAos,
     aosCopiedFiles,
     aosYamlPath,
+    aosExcludedModules,
   }
 }
 

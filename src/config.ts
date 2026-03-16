@@ -50,6 +50,8 @@ export interface AosConfig {
   compute_limit?: string
   /** Module format (default: derived from target, e.g. 'wasm32-unknown-emscripten-metering') */
   module_format?: string
+  /** Dot-path module names to exclude from the aos process.lua (e.g. ['.crypto.init']) */
+  exclude?: string[]
 }
 
 export interface ProcessConfig {
@@ -127,6 +129,7 @@ export interface ResolvedConfig {
     target: 32 | 64
     compute_limit: string
     module_format: string
+    exclude: string[]
   }
 }
 
@@ -206,6 +209,7 @@ export async function resolveConfig(
         target: aosTarget,
         compute_limit: raw.aos.compute_limit ?? '9000000000000',
         module_format: raw.aos.module_format ?? `wasm${aosTarget}-unknown-emscripten-metering`,
+        exclude: raw.aos.exclude ?? [],
       }
     : {
         enabled: false,
@@ -216,6 +220,7 @@ export async function resolveConfig(
         target: 32 as const,
         compute_limit: '9000000000000',
         module_format: 'wasm32-unknown-emscripten-metering',
+        exclude: [],
       }
 
   if (aos.enabled && !/^[0-9a-f]{7,40}$/i.test(aos.commit)) {

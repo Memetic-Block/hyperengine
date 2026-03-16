@@ -167,3 +167,50 @@ export async function writeAosYaml(outDir: string, opts: AosYamlOptions): Promis
   await writeFile(yamlPath, yamlContent, 'utf-8')
   return yamlPath
 }
+
+/**
+ * Strip `require()` calls for the given module names from a Lua file.
+ *
+ * Matches lines like `require(".crypto.init")`, `require '.crypto.init'`,
+ * `require ".crypto.init"`, etc. A leading dot in the user-supplied name
+ * is optional — both `'.crypto.init'` and `'crypto.init'` will match
+ * `require(".crypto.init")`.
+ *
+ * Returns the list of module names that were actually found and removed.
+ */
+export async function stripRequires(
+  luaPath: string,
+  moduleNames: string[],
+): Promise<string[]> {
+  if (moduleNames.length === 0) return []
+
+  const content = await readFile(luaPath, 'utf-8')
+  const lines = content.split('\n')
+  const removed: string[] = []
+
+  // Normalise: ensure every name starts with a dot
+  const normalised = moduleNames.map(n => n.startsWith('.') ? n : `.${n}`)
+
+  // Build a set of patterns to match against
+  const targets = new Set(normalised)
+
+  const filtered = lines.filter(line => {
+    const trimmed = line.trim()
+    // Match require(".name"), require('.name'), require ".name", require '.name'
+    const m = trimmed.match(/^require\s*[\(]?\s*["']([^"']+)["']\s*[\)]?\s*$/)
+    if (m) {
+      const required = m[1]
+      if (targets.has(required)) {
+        removed.push(required)
+        return false
+      }
+    }
+    return true
+  })
+
+  if (removed.length > 0) {
+    await writeFile(luaPath, filtered.join('\n'), 'utf-8')
+  }
+
+  return removed
+}

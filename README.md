@@ -27,6 +27,7 @@ Bundled artifacts may optionally be output as aos modules ready to be build into
   - [AO Message Handlers](#ao-message-handlers)
   - [Per-Process Runtime Override](#per-process-runtime-override)
 - [AOS Module Build](#aos-module-build)
+  - [Excluding Default Modules](#excluding-default-modules)
   - [AOS Build Options](#aos-build-options)
   - [Caching](#caching)
   - [Requirements](#requirements)
@@ -500,6 +501,29 @@ dist/
     config.yml
 ```
 
+### Excluding Default Modules
+
+The default aos `process.lua` loads several built-in modules (crypto, SQLite, etc.) via `require()`. If your process doesn't need them, use `exclude` to strip those `require()` calls from the copied `process.lua`:
+
+```ts
+export default defineConfig({
+  processes: {
+    main: { entry: 'src/process.lua' },
+  },
+  aos: {
+    commit: 'ab1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9',
+    exclude: ['.crypto.init', '.sqlite'],
+  },
+  luarocks: {
+    dependencies: { lustache: '1.3.1-0' },
+  },
+})
+```
+
+Module names use dot-path syntax matching how they appear in Lua `require()` calls. A leading dot is optional — `'crypto.init'` and `'.crypto.init'` both match `require(".crypto.init")`.
+
+The `.lua` files themselves are still copied to the output directory; only the `require()` lines are removed so the modules are never loaded at runtime.
+
 ### AOS Build Options
 
 Customize memory, WASM target, and other ao-dev-cli settings:
@@ -646,6 +670,7 @@ export default defineConfig({
     target: 32,                // wasm32 (default) or 64 for wasm64
     compute_limit: '9000000000000', // Compute limit for publishing
     module_format: 'wasm32-unknown-emscripten-metering', // Auto-derived from target
+    exclude: ['.crypto.init'], // Strip require() calls for unused default modules
   },
 })
 ```
@@ -737,6 +762,8 @@ interface HyperstacheConfig {
     compute_limit?: string
     /** Module format (default: derived from target, e.g. 'wasm32-unknown-emscripten-metering') */
     module_format?: string
+    /** Dot-path module names to exclude from the aos process.lua (e.g. ['.crypto.init']) */
+    exclude?: string[]
   }
 }
 ```
