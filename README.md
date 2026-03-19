@@ -46,6 +46,13 @@ Bundled artifacts may optionally be output as aos modules ready to be build into
   - [Full Config Interface](#full-config-interface)
 - [Vite Plugin](#vite-plugin)
 - [How It Works](#how-it-works)
+- [Deploy & Publish](#deploy--publish)
+  - [Configuration](#deploy-configuration)
+  - [.env File Support](#env-file-support)
+  - [Single-File Process Deploy](#single-file-process-deploy)
+  - [Module Build Deploy](#module-build-deploy)
+  - [Publishing Modules](#publishing-modules)
+  - [Deploy Manifest](#deploy-manifest)
 - [Rockspec Generation](#rockspec-generation)
 - [License](#license)
 
@@ -866,6 +873,144 @@ The cloned aos repo is cached at `node_modules/.cache/hyperstache/aos-{commit}` 
 - **git** must be available on your PATH
 - The `commit` value must be a valid 7-40 character hex commit hash
 
+## Deploy & Publish
+
+Hyperstache includes built-in commands for deploying AO processes and publishing modules to Arweave.
+
+Deploy spawns new AO processes and loads your bundled Lua into them. Publish uploads WASM or Lua modules to Arweave for use as custom AO modules.
+
+### Deploy Configuration
+
+Configure deploy settings in your config file and/or via environment variables:
+
+```ts
+import { defineConfig } from 'hyperstache'
+
+export default defineConfig({
+  processes: {
+    main: { entry: 'src/process.lua' },
+  },
+  deploy: {
+    wallet: './wallet.json',
+    // hyperbeamUrl: 'https://your-hyperbeam-node.example',
+    // scheduler: '_GQ33BkPtZrqxA84vM8Zk-N2aO0toNNu_C-l-rawrBA',
+    // spawnTags: [{ name: 'App-Name', value: 'my-app' }],
+    // actionTags: [{ name: 'X-Custom', value: 'value' }],
+  },
+  luarocks: {
+    dependencies: { lustache: '1.3.1-0' },
+  },
+})
+```
+
+| Option         | Env Variable    | Description                                                    | Default |
+|----------------|-----------------|----------------------------------------------------------------|---------|
+| `wallet`       | `WALLET_PATH`   | Path to Arweave JWK wallet file                                | —       |
+| `hyperbeamUrl` | `HYPERBEAM_URL` | HyperBEAM node URL (sets CU, MU, and Gateway)                  | —       |
+| `scheduler`    |                 | Scheduler address for `ao.spawn()`                              | `_GQ33BkPtZrqxA84vM8Zk-N2aO0toNNu_C-l-rawrBA` |
+| `spawnTags`    |                 | Extra `{ name, value }` tags included on spawn messages         | `[]`    |
+| `actionTags`   |                 | Extra `{ name, value }` tags included on Eval action messages   | `[]`    |
+
+Environment variables take precedence over config file values.
+
+### .env File Support
+
+Hyperstache automatically loads a `.env` file from your project root when running any CLI command. Variables defined in `.env` are applied to `process.env` **without overwriting** existing environment variables.
+
+```bash
+# .env
+WALLET_PATH=./wallet.json
+HYPERBEAM_URL=https://your-hyperbeam-node.example
+```
+
+A `.env.example` file is included in scaffolded projects (via `npx hyperstache create`). Copy it to `.env` and fill in your values:
+
+```bash
+cp .env.example .env
+```
+
+> **Note:** `.env` is already included in the generated `.gitignore` — never commit wallet paths or secrets.
+
+### Single-File Process Deploy
+
+For standard processes (`type: 'process'` or default), deploy:
+
+1. Spawns a new AO process using the standard AOS module (`ISShJH1ij-hPPt9St5UFFr_8Ys3Kj5cyg7zrMGt7H9s`)
+2. Sends an `Eval` message with the bundled Lua source from `dist/`
+3. Confirms the Eval succeeded
+
+```bash
+# Build first
+npx hyperstache build
+
+# Deploy all processes
+npx hyperstache deploy
+
+# Deploy a specific process
+npx hyperstache deploy --process main
+```
+
+### Module Build Deploy
+
+For processes with a published WASM module (built via `ao build`):
+
+1. Looks up the `moduleId` from config or the deploy manifest
+2. Spawns a new AO process using that custom module
+3. No Eval step — the code is baked into the WASM module
+
+You must run `hyperstache publish` before deploying a WASM module build.
+
+Alternatively, set the `moduleId` directly in config:
+
+```ts
+export default defineConfig({
+  processes: {
+    main: {
+      entry: 'src/process.lua',
+      moduleId: 'your-published-module-tx-id',
+    },
+  },
+  deploy: { wallet: './wallet.json' },
+})
+```
+
+> **Note:** Processes with `type: 'module'` (dynamic read modules) are **publish-only** — they cannot be deployed as standalone AO processes. Use `hyperstache publish` for these.
+
+### Publishing Modules
+
+The `publish` command uploads build artifacts to Arweave via [Turbo](https://ardrive.io/turbo/):
+
+- **WASM modules**: Looks for `dist/<name>/process.wasm` (output of `ao build`), uploads with `Content-Type: application/wasm` and `Type: Module` tags
+- **Lua modules**: Uploads the bundled `.lua` file from `dist/` with `Content-Type: text/x-lua` and `Type: Module` tags
+
+```bash
+# Publish all processes
+npx hyperstache publish
+
+# Publish a specific process
+npx hyperstache publish --process reader
+```
+
+The returned transaction ID is saved to the deploy manifest and used as the `moduleId` for subsequent `deploy` commands.
+
+### Deploy Manifest
+
+Deploy and publish results are saved to `.hyperstache/deploy.json` in your project root:
+
+```json
+{
+  "processes": {
+    "main": {
+      "processId": "abc123...",
+      "moduleId": "ISShJH1ij-hPPt9St5UFFr_8Ys3Kj5cyg7zrMGt7H9s",
+      "deployedAt": "2025-01-15T10:30:00.000Z"
+    }
+  }
+}
+```
+
+This file is gitignored by default in scaffolded projects. The manifest allows `deploy` to automatically find `moduleId` values set by a prior `publish`.
+
 ## Project Structure
 
 ```
@@ -908,6 +1053,14 @@ hyperstache dev
 
 # Generate a .rockspec from config
 hyperstache rockspec
+
+# Publish modules to Arweave
+hyperstache publish
+hyperstache publish --process reader
+
+# Deploy (spawn) AO processes
+hyperstache deploy
+hyperstache deploy --process main
 ```
 
 | Command    | Description                                                      |
@@ -916,11 +1069,13 @@ hyperstache rockspec
 | `build`    | Resolve Lua modules, inline templates, emit `.lua` bundles       |
 | `dev`      | Start Vite dev server with the hyperstache plugin                |
 | `rockspec` | Generate a `.rockspec` file from luarocks config                 |
+| `publish`  | Upload WASM or Lua modules to Arweave via Turbo                  |
+| `deploy`   | Spawn AO processes and load bundled Lua code                     |
 
 Options for all commands:
 
 - `-r, --root <dir>` — Project root directory (default: `.`)
-- `-p, --process <name>` — Target a specific process (build/dev only)
+- `-p, --process <name>` — Target a specific process (build/dev/publish/deploy)
 
 Options for `create`:
 
@@ -977,6 +1132,15 @@ export default defineConfig({
     module_format: 'wasm32-unknown-emscripten-metering', // Auto-derived from target
     exclude: ['.crypto.init'], // Strip require() calls for unused default modules
   },
+
+  // Deploy & publish configuration (default: disabled)
+  deploy: {
+    wallet: './wallet.json',    // Path to Arweave JWK wallet (or set WALLET_PATH env var)
+    hyperbeamUrl: 'https://...', // HyperBEAM node URL (or set HYPERBEAM_URL env var)
+    scheduler: '_GQ33BkPtZrqxA84vM8Zk-N2aO0toNNu_C-l-rawrBA', // Scheduler address
+    spawnTags: [{ name: 'App-Name', value: 'my-app' }], // Extra spawn tags
+    actionTags: [],             // Extra Eval action tags
+  },
 })
 ```
 
@@ -1017,6 +1181,9 @@ interface HyperstacheConfig {
 
   /** Artifact type: 'process' (default) or 'module' (dynamic read module, skips aos build) */
   type?: 'process' | 'module'
+
+  /** Published module transaction ID (for WASM module builds, set after publish) */
+  moduleId?: string
 
   /** Output directory (default: 'dist') */
   outDir?: string
@@ -1080,6 +1247,20 @@ interface HyperstacheConfig {
     module_format?: string
     /** Dot-path module names to exclude from the aos process.lua (e.g. ['.crypto.init']) */
     exclude?: string[]
+  }
+
+  /** Deploy & publish configuration */
+  deploy?: {
+    /** Path to Arweave JWK wallet file (or set WALLET_PATH env var) */
+    wallet?: string
+    /** HyperBEAM node URL — sets CU, MU, and Gateway (or set HYPERBEAM_URL env var) */
+    hyperbeamUrl?: string
+    /** Scheduler address for ao.spawn() (default: '_GQ33BkPtZrqxA84vM8Zk-N2aO0toNNu_C-l-rawrBA') */
+    scheduler?: string
+    /** Extra { name, value } tags included on spawn messages */
+    spawnTags?: Array<{ name: string; value: string }>
+    /** Extra { name, value } tags included on Eval action messages */
+    actionTags?: Array<{ name: string; value: string }>
   }
 }
 ```

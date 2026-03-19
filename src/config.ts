@@ -1,7 +1,15 @@
 import { readFile, mkdir, writeFile, stat } from 'node:fs/promises'
 import { resolve, dirname, join, extname, basename } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { config as dotenvConfig } from 'dotenv'
 import type { UserConfig as ViteUserConfig } from 'vite'
+
+/**
+ * Load a .env file into process.env without overwriting existing values.
+ */
+export function loadDotenv(root: string): void {
+  dotenvConfig({ path: resolve(root, '.env'), quiet: true })
+}
 
 export interface ExternalDep {
   /** Module name used as the Rollup external and import map key */
@@ -88,6 +96,26 @@ export interface ProcessConfig {
   luarocks?: LuarocksConfig
   /** Per-process runtime module overrides */
   runtime?: boolean | RuntimeConfig
+  /** Published module transaction ID (for WASM module builds). Set after `publish`. */
+  moduleId?: string
+}
+
+export interface DeployTag {
+  name: string
+  value: string
+}
+
+export interface DeployConfig {
+  /** HyperBeam node URL. Env: HYPERBEAM_URL */
+  hyperbeamUrl?: string
+  /** Path to Arweave JWK wallet file. Env: WALLET_PATH */
+  wallet?: string
+  /** Scheduler address for ao spawn (default: _GQ33BkPtZrqxA84vM8Zk-N2aO0toNNu_C-l-rawrBA) */
+  scheduler?: string
+  /** Extra tags to include on spawn messages */
+  spawnTags?: DeployTag[]
+  /** Extra tags to include on Eval action messages */
+  actionTags?: DeployTag[]
 }
 
 export interface HyperstacheConfig {
@@ -103,6 +131,8 @@ export interface HyperstacheConfig {
   runtime?: boolean | RuntimeConfig
   /** Build as an aos module — clones the aos repo at the given commit and outputs the user's bundle as a require()'d module */
   aos?: AosConfig
+  /** Deploy & publish configuration */
+  deploy?: DeployConfig
 }
 
 export interface ResolvedProcessConfig {
@@ -118,6 +148,8 @@ export interface ResolvedProcessConfig {
   outFile: string
   /** Absolute path to the project root */
   root: string
+  /** Published module transaction ID (for WASM module builds) */
+  moduleId?: string
   templates: {
     extensions: string[]
     dir: string
@@ -155,6 +187,28 @@ export interface ResolvedConfig {
     compute_limit: string
     module_format: string
     exclude: string[]
+  }
+  deploy: ResolvedDeployConfig
+}
+
+export const DEFAULT_SCHEDULER = '_GQ33BkPtZrqxA84vM8Zk-N2aO0toNNu_C-l-rawrBA'
+export const AOS_MODULE_ID = 'ISShJH1ij-hPPt9St5UFFr_8Ys3Kj5cyg7zrMGt7H9s'
+
+export interface ResolvedDeployConfig {
+  hyperbeamUrl?: string
+  wallet?: string
+  scheduler: string
+  spawnTags: DeployTag[]
+  actionTags: DeployTag[]
+}
+
+export function resolveDeployConfig(raw?: DeployConfig): ResolvedDeployConfig {
+  return {
+    hyperbeamUrl: process.env.HYPERBEAM_URL || raw?.hyperbeamUrl || undefined,
+    wallet: process.env.WALLET_PATH || raw?.wallet || undefined,
+    scheduler: raw?.scheduler ?? DEFAULT_SCHEDULER,
+    spawnTags: raw?.spawnTags ?? [],
+    actionTags: raw?.actionTags ?? [],
   }
 }
 
@@ -284,6 +338,7 @@ export async function resolveConfig(
         outDir,
         outFile: proc.outFile ?? defaultOutFile,
         root,
+        moduleId: proc.moduleId,
         templates: {
           extensions: mergedTemplates.extensions ?? DEFAULT_EXTENSIONS,
           dir: await resolveTemplatesDir(root, entryDir, mergedTemplates.dir),
@@ -320,10 +375,13 @@ export async function resolveConfig(
       luaVersion: processes[0].luarocks.luaVersion,
     },
     aos,
+    deploy: resolveDeployConfig(raw.deploy),
   }
 }
 
 export async function loadConfig(root: string): Promise<ResolvedConfig> {
+  loadDotenv(root)
+
   for (const name of CONFIG_FILES) {
     const filePath = resolve(root, name)
     try {

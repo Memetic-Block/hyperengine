@@ -24,6 +24,7 @@ dist/
 lua_modules/
 *.rockspec
 .env
+.hyperstache/
 `
 }
 
@@ -108,6 +109,12 @@ export default defineConfig({
       lustache: '1.3.1-0',
     },
   },
+  // deploy: {
+  //   wallet: './wallet.json',
+  //   // hyperbeamUrl: 'https://your-hyperbeam-node.example',
+  //   // scheduler: '_GQ33BkPtZrqxA84vM8Zk-N2aO0toNNu_C-l-rawrBA',
+  //   // spawnTags: [{ name: 'App-Name', value: '${flags.esm ? 'my-app' : 'my-app'}' }],
+  // },
 })
 `
 }
@@ -183,14 +190,29 @@ function packageJson(name: string, flags: CreateFlags): string {
     scripts: {
       build: 'hyperstache build',
       dev: 'hyperstache dev',
+      deploy: 'hyperstache deploy',
+      publish: 'hyperstache publish',
     },
     devDependencies: {
       hyperstache: 'latest',
       vite: '^6.0.0',
       ...(flags.typescript ? { typescript: '^5.6.0' } : {}),
     },
+    dependencies: {
+      '@permaweb/aoconnect': '^0.0.93',
+      '@ardrive/turbo-sdk': '^1.0.0',
+    },
   }
   return JSON.stringify(pkg, null, 2) + '\n'
+}
+
+function envExample(): string {
+  return `# Arweave JWK wallet file path (used by deploy and publish commands)
+# WALLET_PATH=./wallet.json
+
+# HyperBEAM node URL (sets CU, MU, and Gateway for aoconnect)
+# HYPERBEAM_URL=https://your-hyperbeam-node.example
+`
 }
 
 // ---------------------------------------------------------------------------
@@ -207,6 +229,7 @@ function buildFiles(name: string, flags: CreateFlags): FileEntry[] {
     { path: 'src/lib/utils.lua', content: utilsLua() },
     { path: 'src/templates/index.html', content: indexHtml(flags) },
     { path: 'src/templates/styles.css', content: stylesCss() },
+    { path: '.env.example', content: envExample() },
   ]
 
   if (flags.typescript) {

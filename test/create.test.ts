@@ -31,6 +31,7 @@ async function listFiles(dir: string, prefix = ''): Promise<string[]> {
 
 describe('createProject', () => {
   const BASE_FILES = [
+    '.env.example',
     '.gitignore',
     'README.md',
     'hyperstache.config.ts',

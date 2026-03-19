@@ -20,6 +20,9 @@ export default defineConfig({
     'fast-glob',
     'vite',
     'esbuild',
+    '@permaweb/aoconnect',
+    '@ardrive/turbo-sdk',
+    'dotenv',
   ],
   onSuccess: async () => {
     // Copy Lua runtime files to dist/lua/ so they resolve via import.meta.url

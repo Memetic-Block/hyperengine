@@ -7,6 +7,7 @@ import { loadConfig } from './config.js'
 import { bundle } from './bundler/index.js'
 import { writeRockspec } from './rockspec.js'
 import { createProject, printNextSteps } from './create.js'
+import { loadWallet, publishProcess, mergeManifest, deployProcess } from './deploy/index.js'
 import type { CreateFlags } from './create.js'
 
 const pkg = JSON.parse(
@@ -135,6 +136,103 @@ program
       console.error((err as Error).message)
       process.exit(1)
     }
+  })
+
+program
+  .command('publish')
+  .description('Publish WASM or Lua modules to Arweave via Turbo')
+  .option('-r, --root <dir>', 'Project root directory', '.')
+  .option('-p, --process <name>', 'Publish only the named process')
+  .action(async (opts) => {
+    const root = resolve(opts.root)
+    const config = await loadConfig(root)
+
+    if (!config.deploy.wallet) {
+      console.error('No wallet configured. Set WALLET_PATH env var or deploy.wallet in config.')
+      process.exit(1)
+    }
+
+    const wallet = await loadWallet(config.deploy.wallet, root)
+
+    const targets = opts.process
+      ? config.processes.filter(p => p.name === opts.process)
+      : config.processes
+
+    if (opts.process && targets.length === 0) {
+      const names = config.processes.map(p => p.name).join(', ')
+      console.error(`Unknown process "${opts.process}". Available: ${names}`)
+      process.exit(1)
+    }
+
+    const updates: Record<string, { moduleId: string }> = {}
+    for (const proc of targets) {
+      try {
+        const result = await publishProcess(proc, config.deploy, wallet)
+        console.log(`[${result.processName}] Published ${result.type} module: ${result.transactionId}`)
+        updates[result.processName] = { moduleId: result.transactionId }
+      } catch (err: unknown) {
+        console.error(`[${proc.name}] ${(err as Error).message}`)
+        process.exit(1)
+      }
+    }
+
+    await mergeManifest(root, updates)
+    console.log('Deploy manifest updated.')
+  })
+
+program
+  .command('deploy')
+  .description('Spawn AO processes and load bundled Lua code')
+  .option('-r, --root <dir>', 'Project root directory', '.')
+  .option('-p, --process <name>', 'Deploy only the named process')
+  .action(async (opts) => {
+    const root = resolve(opts.root)
+    const config = await loadConfig(root)
+
+    if (!config.deploy.wallet) {
+      console.error('No wallet configured. Set WALLET_PATH env var or deploy.wallet in config.')
+      process.exit(1)
+    }
+
+    const wallet = await loadWallet(config.deploy.wallet, root)
+
+    // Filter to deployable processes (skip type: 'module' — those are publish-only)
+    let targets = config.processes.filter(p => p.type !== 'module')
+
+    if (opts.process) {
+      targets = targets.filter(p => p.name === opts.process)
+      if (targets.length === 0) {
+        const deployable = config.processes.filter(p => p.type !== 'module').map(p => p.name)
+        const moduleOnly = config.processes.filter(p => p.type === 'module').map(p => p.name)
+        let msg = `Cannot deploy "${opts.process}".`
+        if (moduleOnly.includes(opts.process)) {
+          msg += ` Process "${opts.process}" is a dynamic read module (type: 'module'). Use \`publish\` instead.`
+        } else {
+          msg += ` Available: ${deployable.join(', ')}`
+        }
+        console.error(msg)
+        process.exit(1)
+      }
+    }
+
+    const updates: Record<string, { processId: string; moduleId: string }> = {}
+    for (const proc of targets) {
+      try {
+        const result = await deployProcess(proc, config.deploy, wallet, root)
+        console.log(`[${result.processName}] Spawned process: ${result.processId}`)
+        console.log(`[${result.processName}] Module: ${result.moduleId}`)
+        updates[result.processName] = {
+          processId: result.processId,
+          moduleId: result.moduleId,
+        }
+      } catch (err: unknown) {
+        console.error(`[${proc.name}] ${(err as Error).message}`)
+        process.exit(1)
+      }
+    }
+
+    await mergeManifest(root, updates)
+    console.log('Deploy manifest updated.')
   })
 
 program.parse()
