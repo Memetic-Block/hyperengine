@@ -88,7 +88,7 @@ npx hyperstache create my-app --directory ~/projects
 
 | Flag           | Effect                                                       |
 |----------------|--------------------------------------------------------------|
-| `--typescript` | Adds TypeScript: tsconfig.json, app.ts entry, TS devDep      |
+| `--typescript` | Adds TypeScript: tsconfig.json, app.ts entry, `type="module"` on script tags, TS devDep |
 | `--esm`        | Enables ESM mode in the Vite config (`vite: { esm: true }`)  |
 | `--directory`  | Parent directory for the new project (default: current dir)   |
 
@@ -847,7 +847,7 @@ Options for all commands:
 
 Options for `create`:
 
-- `-T, --typescript` — Include TypeScript support
+- `-T, --typescript` — Include TypeScript support (adds `type="module"` to script tags for Vite processing)
 - `-e, --esm` — Enable ESM mode for inlined scripts
 - `-d, --directory <dir>` — Parent directory for the new project (default: `.`)
 

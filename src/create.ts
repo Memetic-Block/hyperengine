@@ -110,7 +110,7 @@ export default defineConfig({
 
 function indexHtml(flags: CreateFlags): string {
   const ext = flags.typescript ? 'ts' : 'js'
-  const type = flags.esm ? ' type="module"' : ''
+  const type = (flags.esm || flags.typescript) ? ' type="module"' : ''
   return `<!DOCTYPE html>
 <html>
 <head>

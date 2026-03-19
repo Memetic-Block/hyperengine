@@ -99,11 +99,10 @@ describe('createProject', () => {
       expect(html).not.toContain('app.js')
     })
 
-    it('html does not include type="module" without --esm', async () => {
+    it('html includes type="module" for Vite to process .ts entry', async () => {
       await createProject('my-app', { typescript: true }, tmp)
       const html = await readFile(join(tmp, 'my-app/src/templates/index.html'), 'utf-8')
-      expect(html).toContain('<script src="./app.ts">')
-      expect(html).not.toContain('type="module"')
+      expect(html).toContain('<script type="module" src="./app.ts">')
     })
   })
 
