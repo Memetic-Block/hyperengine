@@ -3,11 +3,9 @@ import { join, resolve } from 'node:path'
 
 const VALID_NAME = /^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$/
 
-const TEMPLATES = ['basic', 'vite', 'typescript', 'tailwind'] as const
-export type TemplateName = (typeof TEMPLATES)[number]
-
-export function isValidTemplate(name: string): name is TemplateName {
-  return TEMPLATES.includes(name as TemplateName)
+export interface CreateFlags {
+  typescript?: boolean
+  esm?: boolean
 }
 
 interface FileEntry {
@@ -16,7 +14,7 @@ interface FileEntry {
 }
 
 // ---------------------------------------------------------------------------
-// Shared files (all templates)
+// Shared files
 // ---------------------------------------------------------------------------
 
 function gitignore(): string {
@@ -31,7 +29,7 @@ lua_modules/
 function readme(name: string): string {
   return `# ${name}
 
-An [AO](https://ao.arweave.net) Lua process built with [hyperstache](https://github.com/memetic-block/hyperstache).
+An [AO](https://ao.arweave.net) Lua process built with [hyperstache](https://github.com/memetic-block/hyperstache) and [Vite](https://vite.dev/).
 
 ## Getting Started
 
@@ -45,7 +43,7 @@ npx hyperstache build
 ## Development
 
 \`\`\`bash
-npx hyperstache build
+npx hyperstache dev
 \`\`\`
 `
 }
@@ -72,72 +70,6 @@ return M
 `
 }
 
-function indexHtml(): string {
-  return `<!DOCTYPE html>
-<html>
-<head><title>{{title}}</title></head>
-<body>
-  <h1>{{title}}</h1>
-  <p>Hello, {{name}}!</p>
-</body>
-</html>
-`
-}
-
-function configBasic(): string {
-  return `import { defineConfig } from 'hyperstache'
-
-export default defineConfig({
-  processes: {
-    main: { entry: 'src/process.lua' },
-  },
-  luarocks: {
-    dependencies: {
-      lustache: '1.3.1-0',
-    },
-  },
-})
-`
-}
-
-// ---------------------------------------------------------------------------
-// Vite additions
-// ---------------------------------------------------------------------------
-
-function configVite(): string {
-  return `import { defineConfig } from 'hyperstache'
-
-export default defineConfig({
-  processes: {
-    main: { entry: 'src/process.lua' },
-  },
-  templates: {
-    vite: true,
-  },
-  luarocks: {
-    dependencies: {
-      lustache: '1.3.1-0',
-    },
-  },
-})
-`
-}
-
-function indexHtmlVite(): string {
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <title>{{title}}</title>
-  <link rel="stylesheet" href="./styles.css">
-</head>
-<body>
-  <h1>{{title}}</h1>
-  <p>Hello, {{name}}!</p>
-</body>
-</html>
-`
-}
-
 function stylesCss(): string {
   return `body {
   font-family: system-ui, -apple-system, sans-serif;
@@ -152,33 +84,34 @@ h1 {
 `
 }
 
-function readmeVite(name: string): string {
-  return `# ${name}
+// ---------------------------------------------------------------------------
+// Flag-dependent files
+// ---------------------------------------------------------------------------
 
-An [AO](https://ao.arweave.net) Lua process built with [hyperstache](https://github.com/memetic-block/hyperstache) and [Vite](https://vite.dev/).
+function config(flags: CreateFlags): string {
+  const viteValue = flags.esm ? '{\n      esm: true,\n    }' : 'true'
+  return `import { defineConfig } from 'hyperstache'
 
-## Getting Started
-
-\`\`\`bash
-npm install
-npx hyperstache rockspec
-luarocks make --only-deps --tree lua_modules *.rockspec
-npx hyperstache build
-\`\`\`
-
-## Development
-
-\`\`\`bash
-npx hyperstache dev
-\`\`\`
+export default defineConfig({
+  processes: {
+    main: { entry: 'src/process.lua' },
+  },
+  templates: {
+    vite: ${viteValue},
+  },
+  luarocks: {
+    dependencies: {
+      lustache: '1.3.1-0',
+    },
+  },
+})
 `
 }
 
-// ---------------------------------------------------------------------------
-// TypeScript additions
-// ---------------------------------------------------------------------------
-
-function indexHtmlTs(): string {
+function indexHtml(flags: CreateFlags): string {
+  const scriptTag = flags.typescript
+    ? '\n  <div id="greeting"></div>\n  <script type="module" src="./app.ts"></script>'
+    : ''
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -187,9 +120,7 @@ function indexHtmlTs(): string {
 </head>
 <body>
   <h1>{{title}}</h1>
-  <p>Hello, {{name}}!</p>
-  <div id="greeting"></div>
-  <script type="module" src="./app.ts"></script>
+  <p>Hello, {{name}}!</p>${scriptTag}
 </body>
 </html>
 `
@@ -224,57 +155,7 @@ function tsconfig(): string {
 `
 }
 
-// ---------------------------------------------------------------------------
-// Tailwind additions
-// ---------------------------------------------------------------------------
-
-function configTailwind(): string {
-  return `import { defineConfig } from 'hyperstache'
-import tailwindcss from '@tailwindcss/vite'
-
-export default defineConfig({
-  processes: {
-    main: { entry: 'src/process.lua' },
-  },
-  templates: {
-    vite: {
-      plugins: [tailwindcss()],
-    },
-  },
-  luarocks: {
-    dependencies: {
-      lustache: '1.3.1-0',
-    },
-  },
-})
-`
-}
-
-function stylesTailwind(): string {
-  return `@import "tailwindcss";
-`
-}
-
-function indexHtmlTailwind(): string {
-  return `<!DOCTYPE html>
-<html>
-<head>
-  <title>{{title}}</title>
-  <link rel="stylesheet" href="./styles.css">
-</head>
-<body class="bg-gray-100 p-8">
-  <h1 class="text-3xl font-bold text-gray-800">{{title}}</h1>
-  <p class="mt-2 text-gray-600">Hello, {{name}}!</p>
-</body>
-</html>
-`
-}
-
-// ---------------------------------------------------------------------------
-// Package.json generators
-// ---------------------------------------------------------------------------
-
-function packageJson(name: string, template: TemplateName): string {
+function packageJson(name: string, flags: CreateFlags): string {
   const pkg: Record<string, unknown> = {
     name,
     version: '0.1.0',
@@ -282,82 +163,41 @@ function packageJson(name: string, template: TemplateName): string {
     type: 'module',
     scripts: {
       build: 'hyperstache build',
-      ...(template !== 'basic' ? { dev: 'hyperstache dev' } : {}),
+      dev: 'hyperstache dev',
     },
     devDependencies: {
       hyperstache: 'latest',
-      ...(template !== 'basic' ? { vite: '^6.0.0' } : {}),
-      ...(template === 'typescript' ? { typescript: '^5.6.0' } : {}),
-      ...(template === 'tailwind'
-        ? { '@tailwindcss/vite': '^4.0.0', tailwindcss: '^4.0.0' }
-        : {}),
+      vite: '^6.0.0',
+      ...(flags.typescript ? { typescript: '^5.6.0' } : {}),
     },
   }
   return JSON.stringify(pkg, null, 2) + '\n'
 }
 
 // ---------------------------------------------------------------------------
-// File collectors per template
+// File collector
 // ---------------------------------------------------------------------------
 
-function basicFiles(name: string): FileEntry[] {
-  return [
-    { path: 'package.json', content: packageJson(name, 'basic') },
+function buildFiles(name: string, flags: CreateFlags): FileEntry[] {
+  const files: FileEntry[] = [
+    { path: 'package.json', content: packageJson(name, flags) },
     { path: '.gitignore', content: gitignore() },
     { path: 'README.md', content: readme(name) },
-    { path: 'hyperstache.config.ts', content: configBasic() },
+    { path: 'hyperstache.config.ts', content: config(flags) },
     { path: 'src/process.lua', content: processLua() },
     { path: 'src/lib/utils.lua', content: utilsLua() },
-    { path: 'src/templates/index.html', content: indexHtml() },
-  ]
-}
-
-function viteFiles(name: string): FileEntry[] {
-  return [
-    { path: 'package.json', content: packageJson(name, 'vite') },
-    { path: '.gitignore', content: gitignore() },
-    { path: 'README.md', content: readmeVite(name) },
-    { path: 'hyperstache.config.ts', content: configVite() },
-    { path: 'src/process.lua', content: processLua() },
-    { path: 'src/lib/utils.lua', content: utilsLua() },
-    { path: 'src/templates/index.html', content: indexHtmlVite() },
+    { path: 'src/templates/index.html', content: indexHtml(flags) },
     { path: 'src/templates/styles.css', content: stylesCss() },
   ]
-}
 
-function typescriptFiles(name: string): FileEntry[] {
-  return [
-    { path: 'package.json', content: packageJson(name, 'typescript') },
-    { path: '.gitignore', content: gitignore() },
-    { path: 'README.md', content: readmeVite(name) },
-    { path: 'hyperstache.config.ts', content: configVite() },
-    { path: 'tsconfig.json', content: tsconfig() },
-    { path: 'src/process.lua', content: processLua() },
-    { path: 'src/lib/utils.lua', content: utilsLua() },
-    { path: 'src/templates/index.html', content: indexHtmlTs() },
-    { path: 'src/templates/styles.css', content: stylesCss() },
-    { path: 'src/templates/app.ts', content: appTs() },
-  ]
-}
+  if (flags.typescript) {
+    files.push(
+      { path: 'tsconfig.json', content: tsconfig() },
+      { path: 'src/templates/app.ts', content: appTs() },
+    )
+  }
 
-function tailwindFiles(name: string): FileEntry[] {
-  return [
-    { path: 'package.json', content: packageJson(name, 'tailwind') },
-    { path: '.gitignore', content: gitignore() },
-    { path: 'README.md', content: readmeVite(name) },
-    { path: 'hyperstache.config.ts', content: configTailwind() },
-    { path: 'src/process.lua', content: processLua() },
-    { path: 'src/lib/utils.lua', content: utilsLua() },
-    { path: 'src/templates/index.html', content: indexHtmlTailwind() },
-    { path: 'src/templates/styles.css', content: stylesTailwind() },
-  ]
-}
-
-const FILE_BUILDERS: Record<TemplateName, (name: string) => FileEntry[]> = {
-  basic: basicFiles,
-  vite: viteFiles,
-  typescript: typescriptFiles,
-  tailwind: tailwindFiles,
+  return files
 }
 
 // ---------------------------------------------------------------------------
@@ -366,7 +206,7 @@ const FILE_BUILDERS: Record<TemplateName, (name: string) => FileEntry[]> = {
 
 export async function createProject(
   name: string,
-  template: TemplateName,
+  flags: CreateFlags = {},
   parentDir: string = process.cwd(),
 ): Promise<string> {
   if (!VALID_NAME.test(name)) {
@@ -388,7 +228,7 @@ export async function createProject(
     }
   }
 
-  const files = FILE_BUILDERS[template](name)
+  const files = buildFiles(name, flags)
 
   for (const file of files) {
     const filePath = join(projectDir, file.path)
@@ -399,9 +239,9 @@ export async function createProject(
   return projectDir
 }
 
-export function printNextSteps(name: string, template: TemplateName): void {
+export function printNextSteps(name: string): void {
   console.log()
-  console.log(`  Created ${name}/ with the ${template} template.`)
+  console.log(`  Created ${name}/`)
   console.log()
   console.log('  Next steps:')
   console.log()
@@ -409,10 +249,6 @@ export function printNextSteps(name: string, template: TemplateName): void {
   console.log('    npm install')
   console.log('    npx hyperstache rockspec')
   console.log('    luarocks make --only-deps --tree lua_modules *.rockspec')
-  if (template !== 'basic') {
-    console.log('    npx hyperstache dev')
-  } else {
-    console.log('    npx hyperstache build')
-  }
+  console.log('    npx hyperstache dev')
   console.log()
 }

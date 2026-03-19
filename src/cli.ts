@@ -6,8 +6,8 @@ import { readFile } from 'node:fs/promises'
 import { loadConfig } from './config.js'
 import { bundle } from './bundler/index.js'
 import { writeRockspec } from './rockspec.js'
-import { createProject, printNextSteps, isValidTemplate } from './create.js'
-import type { TemplateName } from './create.js'
+import { createProject, printNextSteps } from './create.js'
+import type { CreateFlags } from './create.js'
 
 const pkg = JSON.parse(
   await readFile(new URL('../package.json', import.meta.url), 'utf-8'),
@@ -106,13 +106,9 @@ program
   .command('create')
   .description('Create a new hyperstache project')
   .argument('[name]', 'Project name')
-  .option('-t, --template <name>', 'Template: basic, vite, typescript, tailwind', 'basic')
-  .action(async (name: string | undefined, opts: { template: string }) => {
-    if (!isValidTemplate(opts.template)) {
-      console.error(`Unknown template "${opts.template}". Choose from: basic, vite, typescript, tailwind`)
-      process.exit(1)
-    }
-
+  .option('-T, --typescript', 'Include TypeScript support')
+  .option('-e, --esm', 'Enable ESM mode for inlined scripts')
+  .action(async (name: string | undefined, opts: { typescript?: boolean; esm?: boolean }) => {
     if (!name) {
       const { createInterface } = await import('node:readline/promises')
       const rl = createInterface({ input: process.stdin, output: process.stdout })
@@ -124,10 +120,13 @@ program
       }
     }
 
-    const template = opts.template as TemplateName
+    const flags: CreateFlags = {
+      typescript: opts.typescript,
+      esm: opts.esm,
+    }
     try {
-      await createProject(name, template)
-      printNextSteps(name, template)
+      await createProject(name, flags)
+      printNextSteps(name)
     } catch (err: unknown) {
       console.error((err as Error).message)
       process.exit(1)

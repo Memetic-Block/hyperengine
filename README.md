@@ -70,25 +70,25 @@ cd my-app
 npm install
 ```
 
-Or choose a template:
+Add flags to customize the scaffold:
 
 ```bash
-# Vite for CSS/JS processing
-npx hyperstache create my-app --template vite
+# With TypeScript support
+npx hyperstache create my-app --typescript
 
-# Vite + TypeScript
-npx hyperstache create my-app --template typescript
+# With ESM mode for inlined scripts
+npx hyperstache create my-app --esm
 
-# Vite + TailwindCSS v4
-npx hyperstache create my-app --template tailwind
+# Combine flags
+npx hyperstache create my-app --typescript --esm
 ```
 
-| Template     | Includes                                                     |
-|--------------|--------------------------------------------------------------|
-| `basic`      | Lua process, Mustache templates, luarocks config             |
-| `vite`       | Basic + Vite template processing, CSS                        |
-| `typescript` | Vite + TypeScript, tsconfig.json                             |
-| `tailwind`   | Vite + TailwindCSS v4 with `@tailwindcss/vite`              |
+| Flag           | Effect                                                       |
+|----------------|--------------------------------------------------------------|
+| `--typescript` | Adds TypeScript: tsconfig.json, app.ts entry, TS devDep      |
+| `--esm`        | Enables ESM mode in the Vite config (`vite: { esm: true }`)  |
+
+All scaffolded projects include Vite template processing, CSS, and a dev server out of the box.
 
 Then install luarocks dependencies and build:
 
@@ -814,7 +814,7 @@ and made available via `require('templates')` as a table keyed by relative path.
 
 ```bash
 # Create a new project
-hyperstache create [name] [--template basic|vite|typescript|tailwind]
+hyperstache create [name] [--typescript] [--esm]
 
 # Bundle all processes
 hyperstache build
@@ -831,7 +831,7 @@ hyperstache rockspec
 
 | Command    | Description                                                      |
 |------------|------------------------------------------------------------------|
-| `create`   | Scaffold a new hyperstache project from a template               |
+| `create`   | Scaffold a new hyperstache project                               |
 | `build`    | Resolve Lua modules, inline templates, emit `.lua` bundles       |
 | `dev`      | Start Vite dev server with the hyperstache plugin                |
 | `rockspec` | Generate a `.rockspec` file from luarocks config                 |
@@ -840,6 +840,11 @@ Options for all commands:
 
 - `-r, --root <dir>` — Project root directory (default: `.`)
 - `-p, --process <name>` — Target a specific process (build/dev only)
+
+Options for `create`:
+
+- `-T, --typescript` — Include TypeScript support
+- `-e, --esm` — Enable ESM mode for inlined scripts
 
 ## Configuration
 

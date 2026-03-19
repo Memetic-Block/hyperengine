@@ -3,7 +3,7 @@ import { mkdtemp, rm, readFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createProject } from '../src/create.js'
-import type { TemplateName } from '../src/create.js'
+import type { CreateFlags } from '../src/create.js'
 
 let tmp: string
 
@@ -30,7 +30,7 @@ async function listFiles(dir: string, prefix = ''): Promise<string[]> {
 }
 
 describe('createProject', () => {
-  const SHARED_FILES = [
+  const BASE_FILES = [
     '.gitignore',
     'README.md',
     'hyperstache.config.ts',
@@ -38,53 +38,39 @@ describe('createProject', () => {
     'src/lib/utils.lua',
     'src/process.lua',
     'src/templates/index.html',
+    'src/templates/styles.css',
   ]
 
-  describe('basic template', () => {
+  describe('no flags (default)', () => {
     it('creates expected files', async () => {
-      await createProject('my-app', 'basic', tmp)
+      await createProject('my-app', {}, tmp)
       const files = await listFiles(join(tmp, 'my-app'))
-      expect(files).toEqual(SHARED_FILES)
-    })
-
-    it('does not include vite in devDependencies', async () => {
-      await createProject('my-app', 'basic', tmp)
-      const pkg = JSON.parse(await readFile(join(tmp, 'my-app/package.json'), 'utf-8'))
-      expect(pkg.devDependencies.vite).toBeUndefined()
-      expect(pkg.scripts.dev).toBeUndefined()
-    })
-
-    it('config has no templates.vite', async () => {
-      await createProject('my-app', 'basic', tmp)
-      const config = await readFile(join(tmp, 'my-app/hyperstache.config.ts'), 'utf-8')
-      expect(config).not.toContain('vite')
-    })
-  })
-
-  describe('vite template', () => {
-    it('creates expected files', async () => {
-      await createProject('my-app', 'vite', tmp)
-      const files = await listFiles(join(tmp, 'my-app'))
-      expect(files).toEqual([...SHARED_FILES, 'src/templates/styles.css'].sort())
+      expect(files).toEqual(BASE_FILES)
     })
 
     it('includes vite in devDependencies and dev script', async () => {
-      await createProject('my-app', 'vite', tmp)
+      await createProject('my-app', {}, tmp)
       const pkg = JSON.parse(await readFile(join(tmp, 'my-app/package.json'), 'utf-8'))
       expect(pkg.devDependencies.vite).toBeDefined()
       expect(pkg.scripts.dev).toBe('hyperstache dev')
     })
 
     it('config enables templates.vite', async () => {
-      await createProject('my-app', 'vite', tmp)
+      await createProject('my-app', {}, tmp)
       const config = await readFile(join(tmp, 'my-app/hyperstache.config.ts'), 'utf-8')
       expect(config).toContain('vite: true')
     })
+
+    it('config does not contain esm', async () => {
+      await createProject('my-app', {}, tmp)
+      const config = await readFile(join(tmp, 'my-app/hyperstache.config.ts'), 'utf-8')
+      expect(config).not.toContain('esm')
+    })
   })
 
-  describe('typescript template', () => {
-    it('creates expected files', async () => {
-      await createProject('my-app', 'typescript', tmp)
+  describe('--typescript', () => {
+    it('creates expected files including tsconfig and app.ts', async () => {
+      await createProject('my-app', { typescript: true }, tmp)
       const files = await listFiles(join(tmp, 'my-app'))
       expect(files).toContain('tsconfig.json')
       expect(files).toContain('src/templates/app.ts')
@@ -92,91 +78,94 @@ describe('createProject', () => {
     })
 
     it('includes typescript in devDependencies', async () => {
-      await createProject('my-app', 'typescript', tmp)
+      await createProject('my-app', { typescript: true }, tmp)
       const pkg = JSON.parse(await readFile(join(tmp, 'my-app/package.json'), 'utf-8'))
       expect(pkg.devDependencies.typescript).toBeDefined()
       expect(pkg.devDependencies.vite).toBeDefined()
     })
 
     it('html references app.ts', async () => {
-      await createProject('my-app', 'typescript', tmp)
+      await createProject('my-app', { typescript: true }, tmp)
       const html = await readFile(join(tmp, 'my-app/src/templates/index.html'), 'utf-8')
       expect(html).toContain('app.ts')
     })
   })
 
-  describe('tailwind template', () => {
-    it('creates expected files', async () => {
-      await createProject('my-app', 'tailwind', tmp)
+  describe('--esm', () => {
+    it('creates base files (no extra typescript files)', async () => {
+      await createProject('my-app', { esm: true }, tmp)
       const files = await listFiles(join(tmp, 'my-app'))
-      expect(files).toContain('src/templates/styles.css')
+      expect(files).toEqual(BASE_FILES)
     })
 
-    it('includes tailwind packages in devDependencies', async () => {
-      await createProject('my-app', 'tailwind', tmp)
-      const pkg = JSON.parse(await readFile(join(tmp, 'my-app/package.json'), 'utf-8'))
-      expect(pkg.devDependencies.tailwindcss).toBeDefined()
-      expect(pkg.devDependencies['@tailwindcss/vite']).toBeDefined()
-    })
-
-    it('styles.css imports tailwindcss', async () => {
-      await createProject('my-app', 'tailwind', tmp)
-      const css = await readFile(join(tmp, 'my-app/src/templates/styles.css'), 'utf-8')
-      expect(css).toContain('@import "tailwindcss"')
-    })
-
-    it('config uses @tailwindcss/vite plugin', async () => {
-      await createProject('my-app', 'tailwind', tmp)
+    it('config contains esm: true', async () => {
+      await createProject('my-app', { esm: true }, tmp)
       const config = await readFile(join(tmp, 'my-app/hyperstache.config.ts'), 'utf-8')
-      expect(config).toContain('@tailwindcss/vite')
+      expect(config).toContain('esm: true')
+    })
+  })
+
+  describe('--typescript --esm', () => {
+    it('creates typescript files and config has esm', async () => {
+      await createProject('my-app', { typescript: true, esm: true }, tmp)
+      const files = await listFiles(join(tmp, 'my-app'))
+      expect(files).toContain('tsconfig.json')
+      expect(files).toContain('src/templates/app.ts')
+      const config = await readFile(join(tmp, 'my-app/hyperstache.config.ts'), 'utf-8')
+      expect(config).toContain('esm: true')
     })
 
-    it('html uses tailwind classes', async () => {
-      await createProject('my-app', 'tailwind', tmp)
-      const html = await readFile(join(tmp, 'my-app/src/templates/index.html'), 'utf-8')
-      expect(html).toContain('class=')
+    it('includes typescript in devDependencies', async () => {
+      await createProject('my-app', { typescript: true, esm: true }, tmp)
+      const pkg = JSON.parse(await readFile(join(tmp, 'my-app/package.json'), 'utf-8'))
+      expect(pkg.devDependencies.typescript).toBeDefined()
     })
   })
 
   describe('validation', () => {
     it('rejects invalid project names', async () => {
-      await expect(createProject('My App!', 'basic', tmp)).rejects.toThrow('Invalid project name')
+      await expect(createProject('My App!', {}, tmp)).rejects.toThrow('Invalid project name')
     })
 
     it('rejects uppercase names', async () => {
-      await expect(createProject('MyApp', 'basic', tmp)).rejects.toThrow('Invalid project name')
+      await expect(createProject('MyApp', {}, tmp)).rejects.toThrow('Invalid project name')
     })
 
     it('rejects empty names', async () => {
-      await expect(createProject('', 'basic', tmp)).rejects.toThrow('Invalid project name')
+      await expect(createProject('', {}, tmp)).rejects.toThrow('Invalid project name')
     })
 
     it('throws when directory already exists', async () => {
-      await createProject('my-app', 'basic', tmp)
-      await expect(createProject('my-app', 'basic', tmp)).rejects.toThrow('already exists')
+      await createProject('my-app', {}, tmp)
+      await expect(createProject('my-app', {}, tmp)).rejects.toThrow('already exists')
     })
   })
 
   describe('common properties', () => {
-    const templates: TemplateName[] = ['basic', 'vite', 'typescript', 'tailwind']
+    const flagCombos: { label: string; flags: CreateFlags }[] = [
+      { label: 'no flags', flags: {} },
+      { label: '--typescript', flags: { typescript: true } },
+      { label: '--esm', flags: { esm: true } },
+      { label: '--typescript --esm', flags: { typescript: true, esm: true } },
+    ]
 
-    for (const template of templates) {
-      it(`${template}: package.json has correct name and type`, async () => {
-        await createProject('test-proj', template, tmp)
+    for (const { label, flags } of flagCombos) {
+      it(`${label}: package.json has correct name and type`, async () => {
+        await createProject('test-proj', flags, tmp)
         const pkg = JSON.parse(await readFile(join(tmp, 'test-proj/package.json'), 'utf-8'))
         expect(pkg.name).toBe('test-proj')
         expect(pkg.type).toBe('module')
         expect(pkg.private).toBe(true)
       })
 
-      it(`${template}: config includes lustache dependency`, async () => {
-        await createProject('test-proj', template, tmp)
+      it(`${label}: config includes lustache dependency`, async () => {
+        await createProject('test-proj', flags, tmp)
         const config = await readFile(join(tmp, 'test-proj/hyperstache.config.ts'), 'utf-8')
         expect(config).toContain('lustache')
       })
 
-      it(`${template}: .gitignore includes node_modules and dist`, async () => {
-        await createProject('test-proj', template, tmp)
+      it(`${label}: .gitignore includes node_modules and dist`, async () => {
+        await createProject('test-proj', flags, tmp)
         const gi = await readFile(join(tmp, 'test-proj/.gitignore'), 'utf-8')
         expect(gi).toContain('node_modules')
         expect(gi).toContain('dist')
