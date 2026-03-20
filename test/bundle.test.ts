@@ -55,18 +55,18 @@ describe('bundle integration', () => {
     // Process name should be set
     expect(result.processName).toBe('main')
 
-    // Runtime not included by default
-    expect(result.runtimeIncluded).toBe(false)
+    // Runtime always included
+    expect(result.runtimeIncluded).toBe(true)
+    expect(result.output).toContain('_modules["hyperstache"]')
   })
 
-  it('bundles with runtime module when enabled', async () => {
+  it('bundles with runtime module included by default', async () => {
     const config = await resolveConfig(
       {
         processes: {
           main: { entry: 'src/process.lua' },
         },
         outDir: 'dist',
-        runtime: true,
       },
       fixtureRoot,
     )
@@ -94,7 +94,7 @@ describe('bundle integration', () => {
           main: { entry: 'src/process.lua' },
         },
         outDir: 'dist',
-        runtime: { handlers: true },
+        handlers: true,
       },
       fixtureRoot,
     )
@@ -121,7 +121,7 @@ describe('bundle integration', () => {
           main: { entry: 'src/process.lua' },
         },
         outDir: 'dist',
-        runtime: { adminInterface: true },
+        adminInterface: true,
       },
       fixtureRoot,
     )
@@ -132,35 +132,32 @@ describe('bundle integration', () => {
     expect(result.runtimeIncluded).toBe(true)
     expect(result.adminIncluded).toBe(true)
 
-    // Admin module should be registered
-    expect(result.output).toContain('_modules["hyperstache-admin"]')
-
-    // Admin module should appear after runtime module
-    const runtimeIdx = result.output.indexOf('_modules["hyperstache"]')
-    const adminIdx = result.output.indexOf('_modules["hyperstache-admin"]')
-    expect(adminIdx).toBeGreaterThan(runtimeIdx)
+    // Admin module should be registered (resolved from src/admin/init.lua)
+    expect(result.output).toContain('_modules["admin"]')
 
     // Should auto-require admin in entry section
     const entryIdx = result.output.indexOf('-- Entry point')
     const afterEntry = result.output.slice(entryIdx)
-    expect(afterEntry).toContain('require("hyperstache-admin")')
+    expect(afterEntry).toContain('require("admin")')
 
-    // Should contain admin UI HTML
-    expect(result.output).toContain('Hyperstache Admin')
+    // Admin template should be collected
+    expect(result.output).toContain('_templates["admin/index.html"]')
+
+    // Admin Lua should contain handler/publish logic
     expect(result.output).toContain('patch@1.0')
 
     // Handlers should be forced on by adminInterface
     expect(result.output).toContain('hyperstache.handlers()')
   })
 
-  it('bundles admin interface with custom path key', async () => {
+  it('bundles admin interface with custom dir option', async () => {
     const config = await resolveConfig(
       {
         processes: {
           main: { entry: 'src/process.lua' },
         },
         outDir: 'dist',
-        runtime: { adminInterface: { path: 'manage' } },
+        adminInterface: { dir: 'src/admin' },
       },
       fixtureRoot,
     )
@@ -169,7 +166,9 @@ describe('bundle integration', () => {
     const result = results[0]
 
     expect(result.adminIncluded).toBe(true)
-    expect(result.output).toContain('local _path = "manage"')
-    expect(result.output).not.toContain('__ADMIN_PATH__')
+    // Admin module resolved and registered
+    expect(result.output).toContain('_modules["admin"]')
+    // Admin template collected
+    expect(result.output).toContain('_templates["admin/index.html"]')
   })
 })

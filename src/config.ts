@@ -54,14 +54,8 @@ export interface LuarocksConfig {
 export interface AdminInterfaceConfig {
   /** Path key used when publishing to patch@1.0 (default: "admin") */
   path?: string
-}
-
-export interface RuntimeConfig {
-  /** Enable AO message handlers for template CRUD */
-  handlers?: boolean
-  /** Enable admin UI for template & ACL management. `true` for defaults, or pass options.
-   *  Implicitly enables `handlers` when set. */
-  adminInterface?: boolean | AdminInterfaceConfig
+  /** Directory containing admin source files (default: "src/admin") */
+  dir?: string
 }
 
 export interface AosConfig {
@@ -94,8 +88,11 @@ export interface ProcessConfig {
   templates?: TemplateConfig
   /** Per-process luarocks overrides */
   luarocks?: LuarocksConfig
-  /** Per-process runtime module overrides */
-  runtime?: boolean | RuntimeConfig
+  /** Enable AO message handlers for template CRUD (per-process override) */
+  handlers?: boolean
+  /** Enable admin UI for template & ACL management (per-process override).
+   *  `true` for defaults, or pass options. Implicitly enables `handlers` when set. */
+  adminInterface?: boolean | AdminInterfaceConfig
   /** Published module transaction ID (for WASM module builds). Set after `publish`. */
   moduleId?: string
 }
@@ -129,8 +126,11 @@ export interface HyperstacheConfig {
   templates?: TemplateConfig
   /** Shared luarocks defaults for all processes */
   luarocks?: LuarocksConfig
-  /** Shared runtime module defaults for all processes */
-  runtime?: boolean | RuntimeConfig
+  /** Enable AO message handlers for template CRUD */
+  handlers?: boolean
+  /** Enable admin UI for template & ACL management. `true` for defaults, or pass options.
+   *  Implicitly enables `handlers` when set. */
+  adminInterface?: boolean | AdminInterfaceConfig
   /** Build as an aos module — clones the aos repo at the given commit and outputs the user's bundle as a require()'d module */
   aos?: AosConfig
   /** Deploy & publish configuration */
@@ -161,13 +161,11 @@ export interface ResolvedProcessConfig {
     dependencies: Record<string, string>
     luaVersion: string
   }
-  runtime: {
+  handlers: boolean
+  adminInterface: {
     enabled: boolean
-    handlers: boolean
-    adminInterface: {
-      enabled: boolean
-      path: string
-    }
+    path: string
+    dir: string
   }
 }
 
@@ -262,25 +260,15 @@ function mergeLuarocksConfig(
   }
 }
 
-function resolveRuntimeOpts(
-  shared: boolean | RuntimeConfig | undefined,
-  process: boolean | RuntimeConfig | undefined,
-): { enabled: boolean; handlers: boolean; adminInterface: { enabled: boolean; path: string } } {
-  const raw = process ?? shared
-  if (raw === true) return { enabled: true, handlers: false, adminInterface: { enabled: false, path: 'admin' } }
-  if (raw === false || raw == null) return { enabled: false, handlers: false, adminInterface: { enabled: false, path: 'admin' } }
-  const adminRaw = raw.adminInterface
-  const adminInterface = adminRaw === true
-    ? { enabled: true, path: 'admin' }
-    : adminRaw && typeof adminRaw === 'object'
-      ? { enabled: true, path: adminRaw.path ?? 'admin' }
-      : { enabled: false, path: 'admin' }
-  const handlers = raw.handlers ?? false
-  return {
-    enabled: true,
-    handlers: adminInterface.enabled ? true : handlers,
-    adminInterface,
-  }
+function resolveAdminInterface(
+  shared: boolean | AdminInterfaceConfig | undefined,
+  perProcess: boolean | AdminInterfaceConfig | undefined,
+  root: string,
+): { enabled: boolean; path: string; dir: string } {
+  const raw = perProcess ?? shared
+  if (raw === true) return { enabled: true, path: 'admin', dir: resolve(root, 'src/admin') }
+  if (raw && typeof raw === 'object') return { enabled: true, path: raw.path ?? 'admin', dir: resolve(root, raw.dir ?? 'src/admin') }
+  return { enabled: false, path: 'admin', dir: resolve(root, 'src/admin') }
 }
 
 export async function resolveConfig(
@@ -333,6 +321,7 @@ export async function resolveConfig(
 
       const mergedTemplates = mergeTemplateConfig(raw.templates, proc.templates)
       const mergedLuarocks = mergeLuarocksConfig(raw.luarocks, proc.luarocks)
+      const adminInterface = resolveAdminInterface(raw.adminInterface, proc.adminInterface, root)
 
       const defaultOutFile = basename(proc.entry, '.lua') + '.lua'
 
@@ -353,7 +342,8 @@ export async function resolveConfig(
           dependencies: mergedLuarocks.dependencies ?? {},
           luaVersion: mergedLuarocks.luaVersion ?? '5.3',
         },
-        runtime: resolveRuntimeOpts(raw.runtime, proc.runtime),
+        adminInterface,
+        handlers: adminInterface.enabled ? true : (proc.handlers ?? raw.handlers ?? false),
       }
     }),
   )

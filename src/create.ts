@@ -1,5 +1,8 @@
-import { mkdir, writeFile, stat } from 'node:fs/promises'
-import { join, relative, resolve } from 'node:path'
+import { mkdir, readFile, writeFile, stat } from 'node:fs/promises'
+import { dirname, join, relative, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const VALID_NAME = /^[a-z0-9]([a-z0-9._-]*[a-z0-9])?$/
 
@@ -49,10 +52,11 @@ npx hyperstache dev
 `
 }
 
-function processLua(): string {
+function processLua(flags: CreateFlags): string {
+  const adminLine = flags.admin ? `require('admin')\n` : ''
   return `local templates = require('templates')
 local lustache = require('lustache')
-
+${adminLine}
 Send({
   device = 'patch@1.0',
   home = lustache:render(templates['index.html'], { title = 'Hello', name = Owner })
@@ -90,9 +94,16 @@ h1 {
 // ---------------------------------------------------------------------------
 
 function config(flags: CreateFlags): string {
-  const viteValue = flags.esm ? '{\n      esm: true,\n    }' : 'true'
+  let viteBlock: string
+  if (flags.admin) {
+    viteBlock = `{\n      esm: true,\n      external: [\n        { name: '@permaweb/aoconnect', url: 'ar://-K45UpuInM8T0zvWSQbi-YPuh1LGGfC62DFCaXvRpdM' },\n      ],\n    }`
+  } else if (flags.esm) {
+    viteBlock = '{\n      esm: true,\n    }'
+  } else {
+    viteBlock = 'true'
+  }
   const runtimeBlock = flags.admin
-    ? `\n  runtime: {\n    handlers: true,\n    adminInterface: true,\n  },`
+    ? `\n  handlers: true,\n  adminInterface: true,`
     : ''
   return `import { defineConfig } from 'hyperstache'
 
@@ -101,7 +112,7 @@ export default defineConfig({
     main: { entry: 'src/process.lua' },
   },
   templates: {
-    vite: ${viteValue},
+    vite: ${viteBlock},
   },${runtimeBlock}
   luarocks: {
     dependencies: {
@@ -219,13 +230,13 @@ function envExample(): string {
 // File collector
 // ---------------------------------------------------------------------------
 
-function buildFiles(name: string, flags: CreateFlags): FileEntry[] {
+async function buildFiles(name: string, flags: CreateFlags): Promise<FileEntry[]> {
   const files: FileEntry[] = [
     { path: 'package.json', content: packageJson(name, flags) },
     { path: '.gitignore', content: gitignore() },
     { path: 'README.md', content: readme(name) },
     { path: 'hyperstache.config.ts', content: config(flags) },
-    { path: 'src/process.lua', content: processLua() },
+    { path: 'src/process.lua', content: processLua(flags) },
     { path: 'src/lib/utils.lua', content: utilsLua() },
     { path: 'src/templates/index.html', content: indexHtml(flags) },
     { path: 'src/templates/styles.css', content: stylesCss() },
@@ -239,6 +250,16 @@ function buildFiles(name: string, flags: CreateFlags): FileEntry[] {
     )
   } else {
     files.push({ path: 'src/templates/app.js', content: appJs() })
+  }
+
+  if (flags.admin) {
+    const scaffoldDir = resolve(__dirname, 'scaffolds', 'admin')
+    files.push(
+      { path: 'src/admin/index.html', content: await readFile(resolve(scaffoldDir, 'index.html'), 'utf-8') },
+      { path: 'src/admin/styles.css', content: await readFile(resolve(scaffoldDir, 'styles.css'), 'utf-8') },
+      { path: 'src/admin/admin.js', content: await readFile(resolve(scaffoldDir, 'admin.js'), 'utf-8') },
+      { path: 'src/admin/init.lua', content: await readFile(resolve(scaffoldDir, 'init.lua'), 'utf-8') },
+    )
   }
 
   return files
@@ -272,7 +293,7 @@ export async function createProject(
     }
   }
 
-  const files = buildFiles(name, flags)
+  const files = await buildFiles(name, flags)
 
   for (const file of files) {
     const filePath = join(projectDir, file.path)

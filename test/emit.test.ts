@@ -119,6 +119,29 @@ describe('emitBundle', () => {
     const afterEntry = output.slice(entryIdx)
     expect(afterEntry).not.toContain('require("hyperstache")')
   })
+
+  it('auto-requires additional modules when autoRequireModules is set', () => {
+    const modules: LuaModule[] = [
+      {
+        name: 'admin',
+        path: '/fake/admin/init.lua',
+        source: 'local admin = {}\nreturn admin',
+        dependencies: [],
+      },
+      {
+        name: 'main',
+        path: '/fake/main.lua',
+        source: 'print("hello")',
+        dependencies: [],
+      },
+    ]
+
+    const output = emitBundle(modules, null, null, false, ['admin'])
+
+    const entryIdx = output.indexOf('-- Entry point')
+    const afterEntry = output.slice(entryIdx)
+    expect(afterEntry).toContain('require("admin")')
+  })
 })
 
 describe('emitModule', () => {

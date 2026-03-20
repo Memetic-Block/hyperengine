@@ -6,11 +6,11 @@ import { collectTemplates } from './templates.js'
 import { emitBundle, emitModule } from './emit.js'
 import { renderTemplates } from './vite-render.js'
 import { generateRuntimeSource } from './runtime.js'
-import { generateAdminSource } from './admin.js'
+import { collectAdminTemplates } from './admin.js'
 import { ensureAosRepo, copyAosProcessFiles, injectRequire, stripRequires, writeAosYaml } from './aos.js'
 
 export { resolveModules, collectTemplates, emitBundle, emitModule, renderTemplates, generateRuntimeSource }
-export { generateAdminSource } from './admin.js'
+export { collectAdminTemplates } from './admin.js'
 export type { AdminOptions } from './admin.js'
 export { parseExternals, resolveExternalUrl } from './vite-render.js'
 export { ensureAosRepo, copyAosProcessFiles, injectRequire, stripRequires, generateAosYaml, writeAosYaml } from './aos.js'
@@ -71,19 +71,34 @@ export async function bundleProcess(
   process: ResolvedProcessConfig,
   aos: AosOpts = { enabled: false, commit: '', stack_size: 3_145_728, initial_memory: 4_194_304, maximum_memory: 1_073_741_824, target: 32, compute_limit: '9000000000000', module_format: 'wasm32-unknown-emscripten-metering', exclude: [] },
 ): Promise<BundleResult> {
-  // 1. Resolve Lua modules
-  const { modules, unresolved } = await resolveModules(process)
+  const adminEnabled = process.adminInterface.enabled
+
+  // 1. Resolve Lua modules (include admin as extra dependency when enabled)
+  const extraDeps = adminEnabled ? ['admin'] : []
+  const { modules, unresolved } = await resolveModules(process, extraDeps)
 
   // 2. Collect templates
   const { entries, luaSource: templatesLua } = await collectTemplates(process)
+
+  // 2b. Collect admin templates and merge
+  let allEntries = entries
+  if (adminEnabled) {
+    const adminEntries = await collectAdminTemplates({
+      dir: process.adminInterface.dir,
+    })
+    allEntries = [...entries, ...adminEntries]
+  }
 
   // 3. Process templates through Vite if enabled
   const viteEnabled = !!process.templates.vite
   let templatesSource: string | null = null
 
-  if (entries.length > 0) {
+  if (allEntries.length > 0) {
     if (viteEnabled) {
-      const processed = await renderTemplates(entries, process)
+      const additionalDirs = adminEnabled
+        ? [{ prefix: 'admin', dir: process.adminInterface.dir }]
+        : []
+      const processed = await renderTemplates(allEntries, process, additionalDirs)
       // Re-generate Lua source from Vite-processed entries
       const { toLuaLongString } = await import('./templates.js')
       const lines: string[] = ['local _templates = {}']
@@ -93,32 +108,28 @@ export async function bundleProcess(
       lines.push('return _templates')
       templatesSource = lines.join('\n')
     } else {
-      templatesSource = templatesLua
+      // Generate Lua source from all entries (including admin)
+      const { toLuaLongString } = await import('./templates.js')
+      const lines: string[] = ['local _templates = {}']
+      for (const entry of allEntries) {
+        lines.push(`_templates["${entry.key}"] = ${toLuaLongString(entry.content)}`)
+      }
+      lines.push('return _templates')
+      templatesSource = lines.join('\n')
     }
   }
 
-  // 4. Generate runtime module if enabled
-  let runtimeSource: string | null = null
-  if (process.runtime.enabled) {
-    runtimeSource = await generateRuntimeSource({ handlers: process.runtime.handlers })
-  }
-
-  // 4b. Generate admin module if enabled
-  let adminSource: string | null = null
-  if (process.runtime.adminInterface.enabled) {
-    adminSource = await generateAdminSource({
-      handlers: true,
-      path: process.runtime.adminInterface.path,
-    })
-  }
+  // 4. Generate runtime module (always included)
+  const runtimeSource = await generateRuntimeSource({ handlers: process.handlers })
 
   // 5. Emit bundle
-  // Modules always use raw emitBundle (no _init wrapper), even when aos is enabled
+  // Admin is now a regular module resolved from src/admin/init.lua
+  const autoRequireModules = adminEnabled ? ['admin'] : undefined
   const isModule = process.type === 'module'
   const useAos = aos.enabled && !isModule
   const output = useAos
-    ? emitModule(modules, templatesSource, runtimeSource, process.runtime.handlers, adminSource, process.runtime.adminInterface.enabled)
-    : emitBundle(modules, templatesSource, runtimeSource, process.runtime.handlers, adminSource, process.runtime.adminInterface.enabled)
+    ? emitModule(modules, templatesSource, runtimeSource, process.handlers, autoRequireModules)
+    : emitBundle(modules, templatesSource, runtimeSource, process.handlers, autoRequireModules)
 
   // 6. Determine output paths
   // When aos is enabled (for processes only), nest under processName subdir
@@ -162,10 +173,10 @@ export async function bundleProcess(
     outPath,
     unresolved,
     moduleCount: modules.length,
-    templateCount: entries.length,
-    viteProcessed: viteEnabled && entries.length > 0,
-    runtimeIncluded: process.runtime.enabled,
-    adminIncluded: process.runtime.adminInterface.enabled,
+    templateCount: allEntries.length,
+    viteProcessed: viteEnabled && allEntries.length > 0,
+    runtimeIncluded: true,
+    adminIncluded: adminEnabled,
     aosModule: useAos,
     aosCopiedFiles,
     aosYamlPath,

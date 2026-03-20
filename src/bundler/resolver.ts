@@ -69,6 +69,7 @@ export interface ResolveResult {
  */
 export async function resolveModules(
   config: ResolvedProcessConfig,
+  extraDependencies: string[] = [],
 ): Promise<ResolveResult> {
   const entryDir = dirname(config.entry)
   const searchPaths = [
@@ -106,7 +107,7 @@ export async function resolveModules(
 
     const filePath = await tryResolve(moduleName)
     if (!filePath) {
-      if (moduleName !== 'templates' && moduleName !== 'hyperstache') {
+      if (moduleName !== 'templates' && moduleName !== 'hyperstache' && moduleName !== 'hyperstache-admin') {
         // Only mark as unresolved if it's not an auto-generated module
         unresolved.add(moduleName)
       }
@@ -140,6 +141,11 @@ export async function resolveModules(
   const entryDeps = extractRequires(entrySource)
 
   for (const dep of entryDeps) {
+    await visit(dep)
+  }
+
+  // Visit extra dependencies (e.g. admin module) that may not be require()'d in entry
+  for (const dep of extraDependencies) {
     await visit(dep)
   }
 

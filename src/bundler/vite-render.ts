@@ -280,6 +280,7 @@ function resolveAssetRef(
 export async function renderTemplates(
   entries: TemplateEntry[],
   config: ResolvedProcessConfig,
+  additionalDirs?: { prefix: string; dir: string }[],
 ): Promise<TemplateEntry[]> {
   if (!config.templates.vite || entries.length === 0) {
     return entries
@@ -300,6 +301,13 @@ export async function renderTemplates(
     `hyperstache-${randomBytes(6).toString('hex')}`,
   )
   await cp(config.templates.dir, tmpBase, { recursive: true })
+
+  // 1b. Copy additional source directories (e.g. admin) into temp
+  if (additionalDirs) {
+    for (const { prefix, dir } of additionalDirs) {
+      await cp(dir, resolve(tmpBase, prefix), { recursive: true })
+    }
+  }
 
   // 2. Escape Mustache syntax and overwrite HTML files in temp
   const escapeMap = new Map<

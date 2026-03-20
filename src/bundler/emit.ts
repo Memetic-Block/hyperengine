@@ -22,8 +22,7 @@ export function emitBundle(
   templatesLuaSource: string | null,
   runtimeLuaSource?: string | null,
   autoRequireRuntime?: boolean,
-  adminLuaSource?: string | null,
-  autoRequireAdmin?: boolean,
+  autoRequireModules?: string[],
 ): string {
   const lines: string[] = []
 
@@ -64,16 +63,6 @@ export function emitBundle(
     lines.push('')
   }
 
-  // Admin module (if any) — registered after runtime so require('hyperstache') resolves
-  if (adminLuaSource) {
-    lines.push('_modules["hyperstache-admin"] = function()')
-    for (const line of adminLuaSource.split('\n')) {
-      lines.push(`  ${line}`)
-    }
-    lines.push('end')
-    lines.push('')
-  }
-
   // Find the entry module (last one in the array by convention)
   const entryModule = modules[modules.length - 1]
   const depModules = modules.slice(0, -1)
@@ -93,8 +82,10 @@ export function emitBundle(
   if (autoRequireRuntime && runtimeLuaSource) {
     lines.push('require("hyperstache")')
   }
-  if (autoRequireAdmin && adminLuaSource) {
-    lines.push('require("hyperstache-admin")')
+  if (autoRequireModules) {
+    for (const mod of autoRequireModules) {
+      lines.push(`require("${mod}")`)
+    }
   }
   lines.push(entryModule.source)
 
@@ -113,10 +104,9 @@ export function emitModule(
   templatesLuaSource: string | null,
   runtimeLuaSource?: string | null,
   autoRequireRuntime?: boolean,
-  adminLuaSource?: string | null,
-  autoRequireAdmin?: boolean,
+  autoRequireModules?: string[],
 ): string {
-  const inner = emitBundle(modules, templatesLuaSource, runtimeLuaSource, autoRequireRuntime, adminLuaSource, autoRequireAdmin)
+  const inner = emitBundle(modules, templatesLuaSource, runtimeLuaSource, autoRequireRuntime, autoRequireModules)
   const lines: string[] = []
   lines.push('local function _init()')
   for (const line of inner.split('\n')) {

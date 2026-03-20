@@ -34,16 +34,16 @@ export function toLuaLongString(content: string): string {
 }
 
 /**
- * Collect all template files and generate a Lua module source string.
+ * Collect template files from a directory and return entries with optional key prefix.
  */
-export async function collectTemplates(
-  config: ResolvedProcessConfig,
-): Promise<{ entries: TemplateEntry[]; luaSource: string }> {
-  const patterns = config.templates.extensions.map(
-    (ext) => `**/*${ext}`,
-  )
+export async function collectTemplatesFromDir(
+  dir: string,
+  extensions: string[],
+  keyPrefix: string = '',
+): Promise<TemplateEntry[]> {
+  const patterns = extensions.map((ext) => `**/*${ext}`)
   const files = await fg(patterns, {
-    cwd: config.templates.dir,
+    cwd: dir,
     absolute: true,
   })
 
@@ -51,9 +51,23 @@ export async function collectTemplates(
 
   for (const filePath of files.sort()) {
     const content = await readFile(filePath, 'utf-8')
-    const key = relative(config.templates.dir, filePath)
+    const key = keyPrefix + relative(dir, filePath)
     entries.push({ key, path: filePath, content })
   }
+
+  return entries
+}
+
+/**
+ * Collect all template files and generate a Lua module source string.
+ */
+export async function collectTemplates(
+  config: ResolvedProcessConfig,
+): Promise<{ entries: TemplateEntry[]; luaSource: string }> {
+  const entries = await collectTemplatesFromDir(
+    config.templates.dir,
+    config.templates.extensions,
+  )
 
   // Generate Lua module source
   const lines: string[] = ['local _templates = {}']

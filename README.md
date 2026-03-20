@@ -34,7 +34,10 @@ Bundled artifacts may optionally be output as aos modules ready to be build into
     - [ACL API](#acl-api)
   - [Per-Process Runtime Override](#per-process-runtime-override)
   - [Admin Interface](#admin-interface)
+    - [Scaffolding](#scaffolding)
+    - [How It Works](#how-it-works-1)
     - [Custom Path Key](#custom-path-key)
+    - [Custom Admin Directory](#custom-admin-directory)
 - [AOS Module Build](#aos-module-build)
   - [Excluding Default Modules](#excluding-default-modules)
   - [AOS Build Options](#aos-build-options)
@@ -102,7 +105,7 @@ npx hyperstache create my-app --directory ~/projects
 |----------------|--------------------------------------------------------------|
 | `--typescript` | Adds TypeScript: tsconfig.json, app.ts entry, `type="module"` on script tags, TS devDep |
 | `--esm`        | Enables ESM mode in the Vite config (`vite: { esm: true }`)  |
-| `--admin`      | Enables the admin interface (`runtime: { handlers: true, adminInterface: true }`) |
+| `--admin`      | Scaffolds admin UI files into `src/admin/` and enables admin interface in config  |
 | `--directory`  | Parent directory for the new project (default: current dir)   |
 
 All scaffolded projects include Vite template processing, CSS, and a dev server out of the box.
@@ -500,23 +503,7 @@ Without `esm`, the default behavior is unchanged: `type="module"` is stripped fr
 
 ## Runtime Template Management
 
-Hyperstache includes an optional Lua runtime module for managing templates after a process has been deployed. Enable it with `runtime: true` in your config:
-
-```ts
-import { defineConfig } from 'hyperstache'
-
-export default defineConfig({
-  processes: {
-    main: { entry: 'src/process.lua' },
-  },
-  runtime: true,
-  luarocks: {
-    dependencies: { lustache: '1.3.1-0' },
-  },
-})
-```
-
-This bundles a `hyperstache` module that you can require in your Lua process:
+Hyperstache automatically bundles a `hyperstache` Lua runtime module into every process for managing templates after deployment. You can require it in your Lua process:
 
 ```lua
 local hs = require('hyperstache')
@@ -548,14 +535,14 @@ The runtime module:
 
 ### AO Message Handlers
 
-Enable `runtime: { handlers: true }` to auto-register AO message handlers for remote template management:
+Enable `handlers: true` to auto-register AO message handlers for remote template management:
 
 ```ts
 export default defineConfig({
   processes: {
     main: { entry: 'src/process.lua' },
   },
-  runtime: { handlers: true },
+  handlers: true,
   luarocks: {
     dependencies: { lustache: '1.3.1-0' },
   },
@@ -664,23 +651,43 @@ hs.get_roles(address)
 hs.get_roles()
 ```
 
-### Per-Process Runtime Override
+### Per-Process Overrides
 
-Like templates and luarocks, the `runtime` option can be set per-process:
+Like templates and luarocks, `handlers` and `adminInterface` can be set per-process:
 
 ```ts
 export default defineConfig({
   processes: {
-    main: { entry: 'src/process.lua', runtime: { handlers: true } },
-    worker: { entry: 'src/worker.lua', runtime: false },
+    main: { entry: 'src/process.lua', handlers: true },
+    worker: { entry: 'src/worker.lua' },
   },
-  runtime: true,
 })
 ```
 
 ### Admin Interface
 
-Hyperstache includes an optional admin UI module that provides a self-contained HTML interface for managing templates and ACL directly from a browser. Enable it with `adminInterface` in the runtime config:
+Hyperstache includes an optional admin UI for managing templates and ACL directly from a browser. Unlike most bundler internals, the admin files are **scaffolded into your project** as separate HTML, CSS, JS, and Lua files that you can freely customize.
+
+#### Scaffolding
+
+Use the `--admin` flag when creating a new project:
+
+```bash
+npx hyperstache create my-app --admin
+```
+
+This creates four files under `src/admin/`:
+
+| File              | Purpose                                                         |
+|-------------------|-----------------------------------------------------------------|
+| `index.html`      | Admin UI HTML — three panels: templates, ACL, render preview    |
+| `styles.css`      | Admin UI styles (dark theme, GitHub Primer-inspired)            |
+| `admin.js`        | Frontend logic — tab switching, template CRUD, ACL management   |
+| `init.lua`        | Lua handler module — render, publish, and sync handlers         |
+
+All four files are fully editable. The HTML references the CSS and JS via standard `<link>` and `<script>` tags, and the Vite template pipeline inlines them at build time — just like your regular templates.
+
+The scaffolded config enables ESM mode and adds `@permaweb/aoconnect` as a Vite external (loaded via import map from Arweave):
 
 ```ts
 import { defineConfig } from 'hyperstache'
@@ -689,7 +696,16 @@ export default defineConfig({
   processes: {
     main: { entry: 'src/process.lua' },
   },
-  runtime: { adminInterface: true },
+  templates: {
+    vite: {
+      esm: true,
+      external: [
+        { name: '@permaweb/aoconnect', url: 'ar://-K45UpuInM8T0zvWSQbi-YPuh1LGGfC62DFCaXvRpdM' },
+      ],
+    },
+  },
+  handlers: true,
+  adminInterface: true,
   luarocks: {
     dependencies: { lustache: '1.3.1-0' },
   },
@@ -698,54 +714,68 @@ export default defineConfig({
 
 Enabling `adminInterface` automatically enables `handlers` — the admin UI communicates with the process through the existing `Hyperstache-*` message handlers.
 
-The admin module:
+#### How It Works
 
-- **Bundles a self-contained HTML page** with inline CSS and JS — no external assets needed
+At build time, hyperstache:
+
+1. **Resolves** `src/admin/init.lua` as a regular Lua module (name: `admin`)
+2. **Collects** HTML files from `src/admin/` as admin templates (prefixed with `admin/`, e.g. `admin/index.html`)
+3. **Merges** admin templates with your regular templates from `src/templates/`
+4. **Processes** all templates through Vite together — admin CSS and JS are inlined into the admin HTML
+5. **Emits** the admin module alongside your other modules, with an auto-`require("admin")` in the entry point
+
+The admin Lua module:
+
+- **Reads the admin HTML from the templates table** — `require("templates")["admin/index.html"]`
 - **Publishes to `patch@1.0`** on process init and after every mutation (template Set/Remove, role Grant/Revoke)
 - **Stores the rendered HTML** in the `hyperstache_admin` global (auto-persisted by AO)
-- **Loads `@permaweb/aoconnect`** via an import map, resolving from the local HyperBEAM node
 
 The admin UI has three sections:
 
 | Section          | Description                                                |
-|------------------|------------------------------------------------------------|
+|------------------|------------------------------------------------------------||
 | **Templates**    | List, view, create, edit, and delete templates             |
 | **Access Control** | View all roles, grant roles to addresses, revoke roles   |
 | **Render Preview** | Select a template, provide JSON data, preview the output |
 
-The admin interface is registered as `require('hyperstache-admin')` in the bundle and is automatically required when enabled.
-
 #### Custom Path Key
 
-By default, the admin UI is published under the `admin` key via `Send({ device = 'patch@1.0', admin = html })`. To use a different path key:
+By default, the admin UI is published under the `admin` key via `Send({ device = 'patch@1.0', admin = html })`. To use a different path key, edit the `_path` variable in `src/admin/init.lua`:
+
+```lua
+local _path = "manage"  -- was "admin"
+```
+
+The admin page is then accessible at:
+
+```bash
+curl -L 'https://push.forward.computer/<process_id>/now/manage'
+```
+
+#### Custom Admin Directory
+
+By default, admin files are expected at `src/admin/`. To use a different location:
 
 ```ts
 export default defineConfig({
   processes: {
     main: { entry: 'src/process.lua' },
   },
-  runtime: { adminInterface: { path: 'manage' } },
+  adminInterface: { dir: 'src/my-admin' },
   luarocks: {
     dependencies: { lustache: '1.3.1-0' },
   },
 })
 ```
 
-This publishes the admin UI under the `manage` key instead. The admin page is then accessible at:
-
-```bash
-curl -L 'https://push.forward.computer/<process_id>/now/manage'
-```
-
-The admin interface can also be enabled per-process, like other runtime options:
+The admin interface can also be enabled per-process, like other options:
 
 ```ts
 export default defineConfig({
   processes: {
-    main: { entry: 'src/process.lua', runtime: { adminInterface: true } },
-    worker: { entry: 'src/worker.lua', runtime: false },
+    main: { entry: 'src/process.lua', adminInterface: true },
+    worker: { entry: 'src/worker.lua' },
   },
-  runtime: true,
 })
 ```
 
@@ -1029,6 +1059,11 @@ my-ao-app/
   src/
     process.lua
     worker.lua
+    admin/              ← optional, scaffolded with --admin
+      index.html
+      styles.css
+      admin.js
+      init.lua
     handlers/
       home.lua
     templates/
@@ -1250,6 +1285,8 @@ interface HyperstacheConfig {
     adminInterface?: boolean | {
       /** Path key used when publishing to patch@1.0 (default: 'admin') */
       path?: string
+      /** Directory containing admin source files (default: 'src/admin') */
+      dir?: string
     }
   }
 
@@ -1294,8 +1331,8 @@ interface HyperstacheConfig {
 ## How It Works
 
 1. **Resolve** — Parses `require()` calls from the entry Lua file, recursively resolves modules from the project source tree and `lua_modules/` (luarocks local install)
-2. **Collect** — Globs template files, reads them, wraps each in Lua long-string brackets
-3. **Render** *(optional)* — If `templates.vite` is enabled, processes `.html` templates through Vite: escapes Mustache syntax, runs Vite build to compile and inline CSS/JS assets, restores Mustache syntax
+2. **Collect** — Globs template files, reads them, wraps each in Lua long-string brackets. If the admin interface is enabled, collects admin HTML files from `src/admin/` (prefixed with `admin/`) and merges them with user templates.
+3. **Render** *(optional)* — If `templates.vite` is enabled, processes `.html` templates through Vite: escapes Mustache syntax, runs Vite build to compile and inline CSS/JS assets, restores Mustache syntax. Admin templates are processed alongside user templates in a single Vite build.
 4. **Emit** — Wraps each module in a function, generates a `require`-compatible loader, inlines templates as a virtual `require('templates')` module, optionally includes the `require('hyperstache')` runtime module, and appends the entry point source
 5. **Output** — Writes a single flat `.lua` file to `outDir/outFile`
 6. **AOS Module** *(optional)* — If `aos` is configured, wraps the bundle as a Lua module, clones the aos repo at the specified commit, copies its `process/` Lua files to the output directory, injects `require("{processName}")` into the aos `process.lua`, and generates a `config.yml` with ao-dev-cli build options

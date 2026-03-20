@@ -160,10 +160,18 @@ describe('createProject', () => {
   })
 
   describe('--admin', () => {
-    it('creates base files (same as default)', async () => {
+    const ADMIN_FILES = [
+      ...BASE_FILES,
+      'src/admin/admin.js',
+      'src/admin/index.html',
+      'src/admin/init.lua',
+      'src/admin/styles.css',
+    ].sort()
+
+    it('creates base files plus admin scaffold files', async () => {
       await createProject('my-app', { admin: true }, tmp)
       const files = await listFiles(join(tmp, 'my-app'))
-      expect(files).toEqual(BASE_FILES)
+      expect(files).toEqual(ADMIN_FILES)
     })
 
     it('config includes adminInterface: true', async () => {
@@ -178,17 +186,31 @@ describe('createProject', () => {
       expect(config).toContain('handlers: true')
     })
 
-    it('config has runtime block with admin', async () => {
+    it('config has handlers and adminInterface with admin', async () => {
       await createProject('my-app', { admin: true }, tmp)
       const config = await readFile(join(tmp, 'my-app/hyperstache.config.ts'), 'utf-8')
-      expect(config).toContain('runtime:')
+      expect(config).toContain('handlers: true')
+      expect(config).toContain('adminInterface: true')
+    })
+
+    it('config enables esm and aoconnect external for admin', async () => {
+      await createProject('my-app', { admin: true }, tmp)
+      const config = await readFile(join(tmp, 'my-app/hyperstache.config.ts'), 'utf-8')
+      expect(config).toContain('esm: true')
+      expect(config).toContain('@permaweb/aoconnect')
+    })
+
+    it('process.lua requires admin module', async () => {
+      await createProject('my-app', { admin: true }, tmp)
+      const lua = await readFile(join(tmp, 'my-app/src/process.lua'), 'utf-8')
+      expect(lua).toContain("require('admin')")
     })
 
     it('config does not include runtime block without admin flag', async () => {
       await createProject('my-app', {}, tmp)
       const config = await readFile(join(tmp, 'my-app/hyperstache.config.ts'), 'utf-8')
       expect(config).not.toContain('adminInterface')
-      expect(config).not.toContain('runtime:')
+      expect(config).not.toContain('handlers:')
     })
   })
 
