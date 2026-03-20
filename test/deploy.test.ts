@@ -19,6 +19,7 @@ vi.mock('@permaweb/aoconnect', () => ({
 
 import { deployProcess } from '../src/deploy/deploy.js'
 import { writeManifest } from '../src/deploy/manifest.js'
+import { createLogger } from '../src/deploy/logger.js'
 import { AOS_MODULE_ID } from '../src/config.js'
 import type { ResolvedProcessConfig, ResolvedDeployConfig } from '../src/config.js'
 
@@ -289,5 +290,43 @@ describe('deployProcess', () => {
     ).rejects.toThrow(/Failed to fetch HyperBEAM node address/)
 
     mockFetch.mockRestore()
+  })
+
+  it('produces verbose output when logger level is verbose', async () => {
+    const proc = makeProc()
+    await mkdir(join(tmp, 'dist'), { recursive: true })
+    await writeFile(join(tmp, 'dist', 'process.lua'), '-- bundled lua code')
+
+    const stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const logger = createLogger({ verbose: true })
+
+    await deployProcess(proc, deployConfig, wallet, tmp, logger)
+
+    const verboseMessages = stderrSpy.mock.calls.map(c => c[0] as string)
+    expect(verboseMessages.some(m => m.includes('[verbose]') && m.includes('Deploying process'))).toBe(true)
+    expect(verboseMessages.some(m => m.includes('[verbose]') && m.includes('Scheduler:'))).toBe(true)
+    expect(verboseMessages.some(m => m.includes('[verbose]') && m.includes('Spawned processId:'))).toBe(true)
+    expect(verboseMessages.some(m => m.includes('[verbose]') && m.includes('Eval succeeded'))).toBe(true)
+
+    stderrSpy.mockRestore()
+  })
+
+  it('produces debug output when logger level is debug', async () => {
+    const proc = makeProc()
+    await mkdir(join(tmp, 'dist'), { recursive: true })
+    await writeFile(join(tmp, 'dist', 'process.lua'), '-- bundled lua code')
+
+    const stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const logger = createLogger({ debug: true })
+
+    await deployProcess(proc, deployConfig, wallet, tmp, logger)
+
+    const allMessages = stderrSpy.mock.calls.map(c => c[0] as string)
+    // debug implies verbose, so both should appear
+    expect(allMessages.some(m => m.includes('[verbose]'))).toBe(true)
+    expect(allMessages.some(m => m.includes('[debug]') && m.includes('aoconnect options'))).toBe(true)
+    expect(allMessages.some(m => m.includes('[debug]') && m.includes('Spawn options'))).toBe(true)
+
+    stderrSpy.mockRestore()
   })
 })

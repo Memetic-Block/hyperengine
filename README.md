@@ -951,6 +951,9 @@ npx hyperstache deploy
 
 # Deploy a specific process
 npx hyperstache deploy --process main
+
+# See detailed step-by-step logs
+npx hyperstache deploy --verbose
 ```
 
 ### Module Build Deploy
@@ -992,6 +995,9 @@ npx hyperstache publish
 
 # Publish a specific process
 npx hyperstache publish --process reader
+
+# See upload details and timing
+npx hyperstache publish --verbose
 ```
 
 The returned transaction ID is saved to the deploy manifest and used as the `moduleId` for subsequent `deploy` commands.
@@ -1064,6 +1070,13 @@ hyperstache publish --process reader
 # Deploy (spawn) AO processes
 hyperstache deploy
 hyperstache deploy --process main
+
+# Verbose output (config, file ops, network status, timing)
+hyperstache deploy --verbose
+hyperstache publish --verbose
+
+# Debug output (all verbose info + payloads and raw responses)
+hyperstache deploy --debug
 ```
 
 | Command    | Description                                                      |
@@ -1079,6 +1092,13 @@ Options for all commands:
 
 - `-r, --root <dir>` — Project root directory (default: `.`)
 - `-p, --process <name>` — Target a specific process (build/dev/publish/deploy)
+
+Options for `deploy` and `publish`:
+
+- `-v, --verbose` — Show detailed operation logs (config resolution, file operations, network status codes, step timing)
+- `-D, --debug` — Show all details including payloads and raw responses (implies `--verbose`)
+
+Verbose and debug output is written to **stderr**, keeping stdout clean for machine-parseable output. Lines are prefixed with `[verbose]` or `[debug]`.
 
 Options for `create`:
 

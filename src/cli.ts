@@ -7,7 +7,7 @@ import { loadConfig } from './config.js'
 import { bundle } from './bundler/index.js'
 import { writeRockspec } from './rockspec.js'
 import { createProject, printNextSteps } from './create.js'
-import { loadWallet, publishProcess, mergeManifest, deployProcess } from './deploy/index.js'
+import { loadWallet, publishProcess, mergeManifest, deployProcess, createLogger } from './deploy/index.js'
 import type { CreateFlags } from './create.js'
 
 const pkg = JSON.parse(
@@ -143,14 +143,20 @@ program
   .description('Publish WASM or Lua modules to Arweave via Turbo')
   .option('-r, --root <dir>', 'Project root directory', '.')
   .option('-p, --process <name>', 'Publish only the named process')
+  .option('-v, --verbose', 'Show detailed operation logs')
+  .option('-D, --debug', 'Show all details including payloads')
   .action(async (opts) => {
     const root = resolve(opts.root)
+    const logger = createLogger({ verbose: opts.verbose, debug: opts.debug })
     const config = await loadConfig(root)
 
     if (!config.deploy.wallet) {
       console.error('No wallet configured. Set WALLET_PATH env var or deploy.wallet in config.')
       process.exit(1)
     }
+
+    logger.verbose(`Project root: ${root}`)
+    logger.verbose(`Wallet path: ${config.deploy.wallet}`)
 
     const wallet = await loadWallet(config.deploy.wallet, root)
 
@@ -164,10 +170,12 @@ program
       process.exit(1)
     }
 
+    logger.verbose(`Target processes: ${targets.map(p => p.name).join(', ')}`)
+
     const updates: Record<string, { moduleId: string }> = {}
     for (const proc of targets) {
       try {
-        const result = await publishProcess(proc, config.deploy, wallet)
+        const result = await publishProcess(proc, config.deploy, wallet, logger)
         console.log(`[${result.processName}] Published ${result.type} module: ${result.transactionId}`)
         updates[result.processName] = { moduleId: result.transactionId }
       } catch (err: unknown) {
@@ -185,14 +193,20 @@ program
   .description('Spawn AO processes and load bundled Lua code')
   .option('-r, --root <dir>', 'Project root directory', '.')
   .option('-p, --process <name>', 'Deploy only the named process')
+  .option('-v, --verbose', 'Show detailed operation logs')
+  .option('-D, --debug', 'Show all details including payloads')
   .action(async (opts) => {
     const root = resolve(opts.root)
+    const logger = createLogger({ verbose: opts.verbose, debug: opts.debug })
     const config = await loadConfig(root)
 
     if (!config.deploy.wallet) {
       console.error('No wallet configured. Set WALLET_PATH env var or deploy.wallet in config.')
       process.exit(1)
     }
+
+    logger.verbose(`Project root: ${root}`)
+    logger.verbose(`Wallet path: ${config.deploy.wallet}`)
 
     const wallet = await loadWallet(config.deploy.wallet, root)
 
@@ -215,10 +229,12 @@ program
       }
     }
 
+    logger.verbose(`Target processes: ${targets.map(p => p.name).join(', ')}`)
+
     const updates: Record<string, { processId: string; moduleId: string }> = {}
     for (const proc of targets) {
       try {
-        const result = await deployProcess(proc, config.deploy, wallet, root)
+        const result = await deployProcess(proc, config.deploy, wallet, root, logger)
         console.log(`[${result.processName}] Module: ${result.moduleId}`)
         console.log(`[${result.processName}] Spawned process: ${result.processId}`)
         console.log(

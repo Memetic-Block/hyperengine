@@ -16,6 +16,7 @@ vi.mock('@ardrive/turbo-sdk', () => ({
 }))
 
 import { publishProcess } from '../src/deploy/publish.js'
+import { createLogger } from '../src/deploy/logger.js'
 import type { ResolvedProcessConfig, ResolvedDeployConfig } from '../src/config.js'
 
 let tmp: string
@@ -79,5 +80,22 @@ describe('publishProcess', () => {
     await expect(publishProcess(proc, deployConfig, wallet)).rejects.toThrow(
       /No build artifact found/,
     )
+  })
+
+  it('produces verbose output when logger level is verbose', async () => {
+    const proc = makeProc()
+    await mkdir(join(tmp, 'dist'), { recursive: true })
+    await writeFile(join(tmp, 'dist', 'process.lua'), '-- bundled lua')
+
+    const stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const logger = createLogger({ verbose: true })
+
+    await publishProcess(proc, deployConfig, wallet, logger)
+
+    const verboseMessages = stderrSpy.mock.calls.map(c => c[0] as string)
+    expect(verboseMessages.some(m => m.includes('[verbose]') && m.includes('Publishing process'))).toBe(true)
+    expect(verboseMessages.some(m => m.includes('[verbose]') && m.includes('Upload complete'))).toBe(true)
+
+    stderrSpy.mockRestore()
   })
 })

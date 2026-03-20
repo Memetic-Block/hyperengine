@@ -9,3 +9,6 @@ export type { PublishResult } from './publish.js'
 
 export { deployProcess } from './deploy.js'
 export type { DeployResult } from './deploy.js'
+
+export { createLogger, defaultLogger } from './logger.js'
+export type { Logger, LogLevel } from './logger.js'
