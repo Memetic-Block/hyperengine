@@ -534,6 +534,10 @@ hs.remove('old.html')
 
 -- Force re-seed from bundled templates (overwrites runtime changes)
 hs.sync()
+
+-- Publish rendered content to patch@1.0 under the configured patchKey
+-- The admin interface uses this internally; you can also use it in your own code
+hs.publish({ page = hs.renderTemplate('index.html', { title = 'Hello' }) })
 ```
 
 The runtime module:
@@ -542,6 +546,7 @@ The runtime module:
 - **Persists across reloads** — State is stored in the lowercase global `hyperstache_templates`
 - **Integrates with lustache** — `hs.renderTemplate(key, data, partials)` looks up a template by key and renders it; `hs.render(template, data, partials)` renders a raw template string directly.
 - **Partials support** — Both render methods accept an optional third argument: a table of partials (keyed by name, values are template strings). All registered `hyperstache_templates` are automatically available as partials, so `{{>index.html}}` works in any template without extra setup. Explicit partials override same-named keys from the template store.
+- **Publish to patch@1.0** — `hs.publish(patches)` sends rendered content to `patch@1.0`, nesting the payload under the configured `patchKey` (default `"ui"`). This prevents raw HTML from appearing in message headers, which would otherwise break `@permaweb/aoconnect` methods. The JSON device lazylink-encodes the HTML within the nested key.
 
 ### AO Message Handlers
 
@@ -751,16 +756,45 @@ The admin UI has three sections:
 
 #### Custom Path Key
 
-By default, the admin UI is published under the `admin` key via `Send({ device = 'patch@1.0', admin = html })`. To use a different path key, edit the `_path` variable in `src/admin/init.lua`:
+By default, the admin UI is published under the `admin` key inside the `patchKey` namespace (default `"ui"`) via `hyperstache.publish({ admin = html })`. To use a different path key, configure it in your config:
 
-```lua
-local _path = "manage"  -- was "admin"
+```ts
+export default defineConfig({
+  processes: {
+    main: { entry: 'src/process.lua' },
+  },
+  adminInterface: { path: 'manage' },
+  luarocks: {
+    dependencies: { lustache: '1.3.1-0' },
+  },
+})
 ```
 
 The admin page is then accessible at:
 
 ```bash
-curl -L 'https://push.forward.computer/<process_id>/now/manage'
+curl -L 'https://push.forward.computer/<process_id>/now/ui/manage'
+```
+
+You can also change the top-level `patchKey` (the namespace under which all published content is nested):
+
+```ts
+export default defineConfig({
+  processes: {
+    main: { entry: 'src/process.lua' },
+  },
+  patchKey: 'dashboard',
+  adminInterface: true,
+  luarocks: {
+    dependencies: { lustache: '1.3.1-0' },
+  },
+})
+```
+
+This nests all published content under `dashboard` instead of `ui`, so the admin page would be at:
+
+```bash
+curl -L 'https://push.forward.computer/<process_id>/now/dashboard/admin'
 ```
 
 #### Custom Admin Directory
@@ -1167,12 +1201,17 @@ export default defineConfig({
       outFile: 'process.lua',      // Output filename (default: derived from entry)
       templates: { /* ... */ },     // Per-process template overrides
       luarocks: { /* ... */ },      // Per-process luarocks overrides
+      patchKey: 'ui',              // Per-process patchKey override
       runtime: true,                // Per-process runtime override
     },
   },
 
   // Output directory (default: "dist")
   outDir: 'dist',
+
+  // Top-level key for publishing rendered templates to patch@1.0 (default: "ui")
+  // Nesting under this key prevents raw HTML in message headers
+  patchKey: 'ui',
 
   // Shared template defaults
   templates: {

@@ -146,9 +146,12 @@ describe('bundle integration', () => {
     // Admin Lua should contain handler/publish logic
     expect(result.output).toContain('patch@1.0')
 
-    // Admin module should auto-call admin.handlers() on load
+    // Admin Lua should use hyperstache.publish() instead of raw Send to patch
     const adminModIdx = result.output.indexOf('_modules["admin"]')
     const adminSection = result.output.slice(adminModIdx)
+    expect(adminSection).toContain('hyperstache.publish(')
+
+    // Admin module should auto-call admin.handlers() on load
     expect(adminSection).toContain('admin.handlers()')
 
     // Handlers should be forced on by adminInterface
@@ -175,5 +178,63 @@ describe('bundle integration', () => {
     expect(result.output).toContain('_modules["admin"]')
     // Admin template collected
     expect(result.output).toContain('_templates["admin/index.html"]')
+  })
+
+  it('injects adminInterface.path into admin module', async () => {
+    const config = await resolveConfig(
+      {
+        processes: {
+          main: { entry: 'src/process.lua' },
+        },
+        outDir: 'dist',
+        adminInterface: { path: 'manage', dir: 'src/admin' },
+      },
+      fixtureRoot,
+    )
+
+    const results = await bundle(config)
+    const result = results[0]
+
+    // Admin module should have injected path
+    const adminModIdx = result.output.indexOf('_modules["admin"]')
+    const adminSection = result.output.slice(adminModIdx)
+    expect(adminSection).toContain('local _path = \"manage\"')
+    expect(adminSection).not.toContain('local _path = \"admin\"')
+  })
+
+  it('bundles with default patchKey of ui', async () => {
+    const config = await resolveConfig(
+      {
+        processes: {
+          main: { entry: 'src/process.lua' },
+        },
+        outDir: 'dist',
+      },
+      fixtureRoot,
+    )
+
+    const results = await bundle(config)
+    const result = results[0]
+
+    // Runtime module should have default _patch_key
+    expect(result.output).toContain('local _patch_key = "ui"')
+  })
+
+  it('bundles with custom patchKey', async () => {
+    const config = await resolveConfig(
+      {
+        processes: {
+          main: { entry: 'src/process.lua', patchKey: 'dashboard' },
+        },
+        outDir: 'dist',
+      },
+      fixtureRoot,
+    )
+
+    const results = await bundle(config)
+    const result = results[0]
+
+    expect(result.output).toContain('local _patch_key = "dashboard"')
+    expect(result.output).not.toContain('local _patch_key = "ui"')
   })
 })

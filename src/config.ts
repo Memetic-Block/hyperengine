@@ -93,6 +93,10 @@ export interface ProcessConfig {
   /** Enable admin UI for template & ACL management (per-process override).
    *  `true` for defaults, or pass options. Implicitly enables `handlers` when set. */
   adminInterface?: boolean | AdminInterfaceConfig
+  /** Top-level key used when publishing rendered templates to `patch@1.0`.
+   *  Nesting under this key causes the JSON device to lazylink-encode HTML,
+   *  preventing raw HTML from appearing in message headers. (default: "ui") */
+  patchKey?: string
   /** Published module transaction ID (for WASM module builds). Set after `publish`. */
   moduleId?: string
 }
@@ -131,6 +135,10 @@ export interface HyperstacheConfig {
   /** Enable admin UI for template & ACL management. `true` for defaults, or pass options.
    *  Implicitly enables `handlers` when set. */
   adminInterface?: boolean | AdminInterfaceConfig
+  /** Top-level key used when publishing rendered templates to `patch@1.0`.
+   *  Nesting under this key causes the JSON device to lazylink-encode HTML,
+   *  preventing raw HTML from appearing in message headers. (default: "ui") */
+  patchKey?: string
   /** Build as an aos module — clones the aos repo at the given commit and outputs the user's bundle as a require()'d module */
   aos?: AosConfig
   /** Deploy & publish configuration */
@@ -167,6 +175,8 @@ export interface ResolvedProcessConfig {
     path: string
     dir: string
   }
+  /** Top-level key used when publishing to patch@1.0 (default: "ui") */
+  patchKey: string
 }
 
 export interface ResolvedConfig {
@@ -344,6 +354,7 @@ export async function resolveConfig(
         },
         adminInterface,
         handlers: adminInterface.enabled ? true : (proc.handlers ?? raw.handlers ?? false),
+        patchKey: proc.patchKey ?? raw.patchKey ?? 'ui',
       }
     }),
   )

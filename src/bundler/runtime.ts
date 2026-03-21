@@ -6,6 +6,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export interface RuntimeOptions {
   handlers: boolean
+  /** Top-level key for patch@1.0 publishing (default: "ui") */
+  patchKey: string
 }
 
 /**
@@ -44,6 +46,12 @@ function luaPath(name: string): string {
  */
 export async function generateRuntimeSource(options: RuntimeOptions): Promise<string> {
   let source = await readFile(luaPath('runtime.lua'), 'utf-8')
+
+  // Inject the configured patch key
+  source = source.replace(
+    'local _patch_key = "ui"',
+    `local _patch_key = "${options.patchKey}"`,
+  )
 
   if (options.handlers) {
     // Insert the auto-call just before the final `return hyperstache`

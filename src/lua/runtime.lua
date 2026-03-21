@@ -1,4 +1,6 @@
 local _bundled = require("templates")
+local _patch_key = "ui"
+
 if not hyperstache_templates then
   hyperstache_templates = {}
 end
@@ -111,6 +113,10 @@ function hyperstache.get_roles(address)
     return hyperstache_acl[address] or {}
   end
   return hyperstache_acl
+end
+
+function hyperstache.publish(patches)
+  Send({ device = "patch@1.0", [_patch_key] = patches })
 end
 
 function hyperstache.handlers()

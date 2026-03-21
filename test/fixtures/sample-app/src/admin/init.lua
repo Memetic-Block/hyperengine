@@ -15,7 +15,7 @@ function admin.publish()
   if not hyperstache_admin then
     admin.render()
   end
-  Send({ device = "patch@1.0", [_path] = hyperstache_admin })
+  hyperstache.publish({ [_path] = hyperstache_admin })
 end
 
 function admin.handlers()
