@@ -97,6 +97,9 @@ export interface ProcessConfig {
    *  Nesting under this key causes the JSON device to lazylink-encode HTML,
    *  preventing raw HTML from appearing in message headers. (default: "ui") */
   patchKey?: string
+  /** Key under which template and ACL state is synced to `patch@1.0`.
+   *  State is nested as `{ templates: ..., acl: ... }` under this key. (default: "hyperstache_state") */
+  stateKey?: string
   /** Published module transaction ID (for WASM module builds). Set after `publish`. */
   moduleId?: string
 }
@@ -139,6 +142,9 @@ export interface HyperstacheConfig {
    *  Nesting under this key causes the JSON device to lazylink-encode HTML,
    *  preventing raw HTML from appearing in message headers. (default: "ui") */
   patchKey?: string
+  /** Key under which template and ACL state is synced to `patch@1.0`.
+   *  State is nested as `{ templates: ..., acl: ... }` under this key. (default: "hyperstache_state") */
+  stateKey?: string
   /** Build as an aos module — clones the aos repo at the given commit and outputs the user's bundle as a require()'d module */
   aos?: AosConfig
   /** Deploy & publish configuration */
@@ -177,6 +183,8 @@ export interface ResolvedProcessConfig {
   }
   /** Top-level key used when publishing to patch@1.0 (default: "ui") */
   patchKey: string
+  /** Key under which template and ACL state is synced to patch@1.0 (default: "hyperstache_state") */
+  stateKey: string
 }
 
 export interface ResolvedConfig {
@@ -355,6 +363,7 @@ export async function resolveConfig(
         adminInterface,
         handlers: adminInterface.enabled ? true : (proc.handlers ?? raw.handlers ?? false),
         patchKey: proc.patchKey ?? raw.patchKey ?? 'ui',
+        stateKey: proc.stateKey ?? raw.stateKey ?? 'hyperstache_state',
       }
     }),
   )

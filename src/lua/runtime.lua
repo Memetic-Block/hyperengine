@@ -1,5 +1,6 @@
 local _bundled = require("templates")
 local _patch_key = "ui"
+local _state_key = "hyperstache_state"
 
 if not hyperstache_templates then
   hyperstache_templates = {}
@@ -20,6 +21,35 @@ end
 
 local lustache = require("lustache")
 
+local function _sync_state()
+  local state = {
+    templates = hyperstache_templates,
+    template_keys = ''
+  }
+  for template_key, _ in pairs(hyperstache_templates) do
+    if state.template_keys ~= '' then
+      state.template_keys = state.template_keys .. ','
+    end
+    state.template_keys = state.template_keys .. template_key
+  end
+  for address, roles in pairs(hyperstache_acl) do
+    local role_list = ''
+    for role, _ in pairs(roles) do
+      if role_list ~= '' then
+        role_list = role_list .. ','
+      end
+      role_list = role_list .. role
+    end
+    state['acl_'..address] = role_list
+  end
+  Send({
+    device = "patch@1.0",
+    [_state_key] = state
+  })
+end
+
+_sync_state()
+
 local hyperstache = {}
 
 function hyperstache.get(key)
@@ -28,10 +58,12 @@ end
 
 function hyperstache.set(key, content)
   hyperstache_templates[key] = content
+  _sync_state()
 end
 
 function hyperstache.remove(key)
   hyperstache_templates[key] = nil
+  _sync_state()
 end
 
 function hyperstache.list()
@@ -79,6 +111,7 @@ function hyperstache.sync()
   for k, v in pairs(_bundled) do
     hyperstache_templates[k] = v
   end
+  _sync_state()
 end
 
 function hyperstache.has_permission(address, action)
@@ -100,6 +133,7 @@ function hyperstache.grant(address, role)
     hyperstache_acl[address] = {}
   end
   hyperstache_acl[address][role] = true
+  _sync_state()
 end
 
 function hyperstache.revoke(address, role)
@@ -110,6 +144,7 @@ function hyperstache.revoke(address, role)
   if next(hyperstache_acl[address]) == nil then
     hyperstache_acl[address] = nil
   end
+  _sync_state()
 end
 
 function hyperstache.get_roles(address)

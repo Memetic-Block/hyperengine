@@ -546,6 +546,7 @@ The runtime module:
 - **Integrates with lustache** — `hs.renderTemplate(key, data, partials)` looks up a template by key and renders it; `hs.render(template, data, partials)` renders a raw template string directly.
 - **Partials support** — Both render methods accept an optional third argument: a table of partials (keyed by name, values are template strings). All registered `hyperstache_templates` are automatically available as partials, so `{{>index.html}}` works in any template without extra setup. Explicit partials override same-named keys from the template store.
 - **Publish to patch@1.0** — `hs.publish(patches)` sends rendered content to `patch@1.0`, nesting the payload under the configured `patchKey` (default `"ui"`). This prevents raw HTML from appearing in message headers, which would otherwise break `@permaweb/aoconnect` methods. The JSON device lazylink-encodes the HTML within the nested key. Patches are accumulated in the persistent `hyperstache_patches` global — each call merges new keys and sends the full state, so no previously-published pages are lost. Use `hs.patch(patches)` to register content without sending (useful during init when multiple modules contribute pages before the first publish).
+- **Auto-sync state to patch@1.0** — `hyperstache_templates` and `hyperstache_acl` are automatically sent to `patch@1.0` under the configured `stateKey` (default `"hyperstache_state"`) whenever they change (`set`, `remove`, `sync`, `grant`, `revoke`) and at init. The state is nested as `{ templates = hyperstache_templates, acl = hyperstache_acl }`, making it fetchable via URL GET on HyperBEAM mainnet at `/<process_id>/now/hyperstache_state/templates/...` and `/<process_id>/now/hyperstache_state/acl/...`. No manual publish step is needed for template or ACL state.
 
 ### AO Message Handlers
 
@@ -1201,6 +1202,7 @@ export default defineConfig({
       templates: { /* ... */ },     // Per-process template overrides
       luarocks: { /* ... */ },      // Per-process luarocks overrides
       patchKey: 'ui',              // Per-process patchKey override
+      stateKey: 'hyperstache_state', // Per-process stateKey override
       runtime: true,                // Per-process runtime override
     },
   },
@@ -1211,6 +1213,10 @@ export default defineConfig({
   // Top-level key for publishing rendered templates to patch@1.0 (default: "ui")
   // Nesting under this key prevents raw HTML in message headers
   patchKey: 'ui',
+
+  // Key under which template and ACL state is synced to patch@1.0 (default: "hyperstache_state")
+  // State is nested as { templates: ..., acl: ... } under this key
+  stateKey: 'hyperstache_state',
 
   // Shared template defaults
   templates: {

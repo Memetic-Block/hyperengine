@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { generateRuntimeSource } from '../src/bundler/runtime.js'
 
+const defaults = { handlers: false, patchKey: 'ui', stateKey: 'hyperstache_state' }
+
 describe('generateRuntimeSource', () => {
   it('generates Lua source with all API functions', async () => {
-    const source = await generateRuntimeSource({ handlers: false, patchKey: 'ui' })
+    const source = await generateRuntimeSource(defaults)
 
     // Should seed from bundled templates
     expect(source).toContain('require("templates")')
@@ -31,7 +33,7 @@ describe('generateRuntimeSource', () => {
   })
 
   it('merges bundled templates without overwriting existing keys', async () => {
-    const source = await generateRuntimeSource({ handlers: false, patchKey: 'ui' })
+    const source = await generateRuntimeSource(defaults)
 
     // Should check for nil before setting
     expect(source).toContain('if hyperstache_templates[k] == nil then')
@@ -39,7 +41,7 @@ describe('generateRuntimeSource', () => {
   })
 
   it('does not auto-register handlers when handlers is false', async () => {
-    const source = await generateRuntimeSource({ handlers: false, patchKey: 'ui' })
+    const source = await generateRuntimeSource(defaults)
 
     // The handlers() function definition should exist
     expect(source).toContain('function hyperstache.handlers()')
@@ -53,7 +55,7 @@ describe('generateRuntimeSource', () => {
   })
 
   it('auto-registers handlers when handlers is true', async () => {
-    const source = await generateRuntimeSource({ handlers: true, patchKey: 'ui' })
+    const source = await generateRuntimeSource({ ...defaults, handlers: true })
 
     // Should have an auto-call to hyperstache.handlers()
     const lines = source.split('\n')
@@ -64,7 +66,7 @@ describe('generateRuntimeSource', () => {
   })
 
   it('registers all expected AO handlers', async () => {
-    const source = await generateRuntimeSource({ handlers: false, patchKey: 'ui' })
+    const source = await generateRuntimeSource(defaults)
 
     expect(source).toContain('"Hyperstache-Get"')
     expect(source).toContain('"Hyperstache-Set"')
@@ -75,14 +77,14 @@ describe('generateRuntimeSource', () => {
   })
 
   it('guards mutation handlers with permission check', async () => {
-    const source = await generateRuntimeSource({ handlers: false, patchKey: 'ui' })
+    const source = await generateRuntimeSource(defaults)
 
     // Set and Remove handlers should use has_permission
     expect(source).toContain('hyperstache.has_permission(msg.From')
   })
 
   it('sync() force-overwrites from bundled templates', async () => {
-    const source = await generateRuntimeSource({ handlers: false, patchKey: 'ui' })
+    const source = await generateRuntimeSource(defaults)
 
     // sync should not check for nil (unconditional overwrite)
     expect(source).toContain('function hyperstache.sync()')
@@ -94,14 +96,14 @@ describe('generateRuntimeSource', () => {
   })
 
   it('initializes hyperstache_acl global with defensive pattern', async () => {
-    const source = await generateRuntimeSource({ handlers: false, patchKey: 'ui' })
+    const source = await generateRuntimeSource(defaults)
 
     expect(source).toContain('if not hyperstache_acl then')
     expect(source).toContain('hyperstache_acl = {}')
   })
 
   it('exposes ACL API functions', async () => {
-    const source = await generateRuntimeSource({ handlers: false, patchKey: 'ui' })
+    const source = await generateRuntimeSource(defaults)
 
     expect(source).toContain('function hyperstache.has_permission(address, action)')
     expect(source).toContain('function hyperstache.grant(address, role)')
@@ -110,7 +112,7 @@ describe('generateRuntimeSource', () => {
   })
 
   it('has_permission checks Owner, admin role, and specific action', async () => {
-    const source = await generateRuntimeSource({ handlers: false, patchKey: 'ui' })
+    const source = await generateRuntimeSource(defaults)
 
     const fnStart = source.indexOf('function hyperstache.has_permission(')
     const fnEnd = source.indexOf('\nend', fnStart)
@@ -125,7 +127,7 @@ describe('generateRuntimeSource', () => {
   })
 
   it('revoke cleans up empty ACL entries', async () => {
-    const source = await generateRuntimeSource({ handlers: false, patchKey: 'ui' })
+    const source = await generateRuntimeSource(defaults)
 
     const fnStart = source.indexOf('function hyperstache.revoke(')
     const fnEnd = source.indexOf('\nend', fnStart)
@@ -137,7 +139,7 @@ describe('generateRuntimeSource', () => {
   })
 
   it('registers ACL handler endpoints', async () => {
-    const source = await generateRuntimeSource({ handlers: false, patchKey: 'ui' })
+    const source = await generateRuntimeSource(defaults)
 
     expect(source).toContain('"Hyperstache-Grant-Role"')
     expect(source).toContain('"Hyperstache-Revoke-Role"')
@@ -145,7 +147,7 @@ describe('generateRuntimeSource', () => {
   })
 
   it('guards mutation handlers with has_permission', async () => {
-    const source = await generateRuntimeSource({ handlers: false, patchKey: 'ui' })
+    const source = await generateRuntimeSource(defaults)
 
     expect(source).toContain(
       'hyperstache.has_permission(msg.From, "Hyperstache-Set")',
@@ -156,7 +158,7 @@ describe('generateRuntimeSource', () => {
   })
 
   it('guards Grant-Role and Revoke-Role with admin permission', async () => {
-    const source = await generateRuntimeSource({ handlers: false, patchKey: 'ui' })
+    const source = await generateRuntimeSource(defaults)
 
     // Both grant and revoke handlers require admin permission
     const grantStart = source.indexOf('"Hyperstache-Grant-Role"')
@@ -175,7 +177,7 @@ describe('generateRuntimeSource', () => {
   })
 
   it('prevents non-Owner admins from granting or revoking admin role', async () => {
-    const source = await generateRuntimeSource({ handlers: false, patchKey: 'ui' })
+    const source = await generateRuntimeSource(defaults)
 
     // Grant handler: admin escalation guard
     const grantStart = source.indexOf('"Hyperstache-Grant-Role"')
@@ -195,7 +197,7 @@ describe('generateRuntimeSource', () => {
   })
 
   it('Get-Roles handler is public with no permission check', async () => {
-    const source = await generateRuntimeSource({ handlers: false, patchKey: 'ui' })
+    const source = await generateRuntimeSource(defaults)
 
     const getRolesStart = source.indexOf('"Hyperstache-Get-Roles"')
     const getRolesEnd = source.indexOf('end\n  )', getRolesStart)
@@ -207,7 +209,7 @@ describe('generateRuntimeSource', () => {
   })
 
   it('renderTemplate builds merged partials from hyperstache_templates', async () => {
-    const source = await generateRuntimeSource({ handlers: false, patchKey: 'ui' })
+    const source = await generateRuntimeSource(defaults)
 
     const fnStart = source.indexOf('function hyperstache.renderTemplate(')
     const fnEnd = source.indexOf('\nend', fnStart)
@@ -224,7 +226,7 @@ describe('generateRuntimeSource', () => {
   })
 
   it('render builds merged partials from hyperstache_templates', async () => {
-    const source = await generateRuntimeSource({ handlers: false, patchKey: 'ui' })
+    const source = await generateRuntimeSource(defaults)
 
     const fnStart = source.indexOf('function hyperstache.render(')
     const fnEnd = source.indexOf('\nend', fnStart)
@@ -241,7 +243,7 @@ describe('generateRuntimeSource', () => {
   })
 
   it('RenderTemplate handler parses JSON with data and partials', async () => {
-    const source = await generateRuntimeSource({ handlers: false, patchKey: 'ui' })
+    const source = await generateRuntimeSource(defaults)
 
     const handlerStart = source.indexOf('"Hyperstache-RenderTemplate"')
     const handlerEnd = source.indexOf('end\n  )', handlerStart)
@@ -255,7 +257,7 @@ describe('generateRuntimeSource', () => {
   })
 
   it('Render handler passes partials from parsed JSON', async () => {
-    const source = await generateRuntimeSource({ handlers: false, patchKey: 'ui' })
+    const source = await generateRuntimeSource(defaults)
 
     const handlerStart = source.indexOf('"Hyperstache-Render"')
     const handlerEnd = source.indexOf('end\n  )', handlerStart)
@@ -266,7 +268,7 @@ describe('generateRuntimeSource', () => {
   })
 
   it('exposes patch() that accumulates without sending', async () => {
-    const source = await generateRuntimeSource({ handlers: false, patchKey: 'ui' })
+    const source = await generateRuntimeSource(defaults)
 
     expect(source).toContain('function hyperstache.patch(patches)')
 
@@ -278,10 +280,11 @@ describe('generateRuntimeSource', () => {
     expect(fnBody).toContain('hyperstache_patches[k] = v')
     // Should NOT send
     expect(fnBody).not.toContain('Send(')
+    expect(fnBody).not.toContain('_sync_state()')
   })
 
   it('exposes publish() that accumulates and sends full state to patch@1.0', async () => {
-    const source = await generateRuntimeSource({ handlers: false, patchKey: 'ui' })
+    const source = await generateRuntimeSource(defaults)
 
     expect(source).toContain('function hyperstache.publish(patches)')
 
@@ -298,22 +301,123 @@ describe('generateRuntimeSource', () => {
   })
 
   it('initializes hyperstache_patches global with defensive pattern', async () => {
-    const source = await generateRuntimeSource({ handlers: false, patchKey: 'ui' })
+    const source = await generateRuntimeSource(defaults)
 
     expect(source).toContain('if not hyperstache_patches then')
     expect(source).toContain('hyperstache_patches = {}')
   })
 
   it('uses default _patch_key = "ui"', async () => {
-    const source = await generateRuntimeSource({ handlers: false, patchKey: 'ui' })
+    const source = await generateRuntimeSource(defaults)
 
     expect(source).toContain('local _patch_key = "ui"')
   })
 
   it('injects custom patchKey into _patch_key', async () => {
-    const source = await generateRuntimeSource({ handlers: false, patchKey: 'dashboard' })
+    const source = await generateRuntimeSource({ ...defaults, patchKey: 'dashboard' })
 
     expect(source).toContain('local _patch_key = "dashboard"')
     expect(source).not.toContain('local _patch_key = "ui"')
+  })
+
+  it('uses default _state_key = "hyperstache_state"', async () => {
+    const source = await generateRuntimeSource(defaults)
+
+    expect(source).toContain('local _state_key = "hyperstache_state"')
+  })
+
+  it('injects custom stateKey into _state_key', async () => {
+    const source = await generateRuntimeSource({ ...defaults, stateKey: 'my_state' })
+
+    expect(source).toContain('local _state_key = "my_state"')
+    expect(source).not.toContain('local _state_key = "hyperstache_state"')
+  })
+
+  it('defines _sync_state helper that sends templates and acl under _state_key', async () => {
+    const source = await generateRuntimeSource(defaults)
+
+    expect(source).toContain('local function _sync_state()')
+
+    const fnStart = source.indexOf('local function _sync_state()')
+    const fnEnd = source.indexOf('\nend', fnStart)
+    const fnBody = source.slice(fnStart, fnEnd)
+
+    expect(fnBody).toContain('device = "patch@1.0"')
+    expect(fnBody).toContain('[_state_key]')
+    expect(fnBody).toContain('templates = hyperstache_templates')
+    expect(fnBody).toContain('acl = hyperstache_acl')
+  })
+
+  it('calls _sync_state() at init after seeding templates and acl', async () => {
+    const source = await generateRuntimeSource(defaults)
+
+    // _sync_state() should be called at top level after the defensive init blocks
+    const patchesInit = source.indexOf('hyperstache_patches = {}')
+    const moduleDef = source.indexOf('local hyperstache = {}')
+    const between = source.slice(patchesInit, moduleDef)
+    expect(between).toContain('_sync_state()')
+  })
+
+  it('set() calls _sync_state()', async () => {
+    const source = await generateRuntimeSource(defaults)
+
+    const fnStart = source.indexOf('function hyperstache.set(')
+    const fnEnd = source.indexOf('\nend', fnStart)
+    const fnBody = source.slice(fnStart, fnEnd)
+
+    expect(fnBody).toContain('_sync_state()')
+  })
+
+  it('remove() calls _sync_state()', async () => {
+    const source = await generateRuntimeSource(defaults)
+
+    const fnStart = source.indexOf('function hyperstache.remove(')
+    const fnEnd = source.indexOf('\nend', fnStart)
+    const fnBody = source.slice(fnStart, fnEnd)
+
+    expect(fnBody).toContain('_sync_state()')
+  })
+
+  it('sync() calls _sync_state()', async () => {
+    const source = await generateRuntimeSource(defaults)
+
+    const fnStart = source.indexOf('function hyperstache.sync()')
+    const fnEnd = source.indexOf('\nend', fnStart)
+    const fnBody = source.slice(fnStart, fnEnd)
+
+    expect(fnBody).toContain('_sync_state()')
+  })
+
+  it('grant() calls _sync_state()', async () => {
+    const source = await generateRuntimeSource(defaults)
+
+    const fnStart = source.indexOf('function hyperstache.grant(')
+    const fnEnd = source.indexOf('\nend', fnStart)
+    const fnBody = source.slice(fnStart, fnEnd)
+
+    expect(fnBody).toContain('_sync_state()')
+  })
+
+  it('revoke() calls _sync_state() after mutation', async () => {
+    const source = await generateRuntimeSource(defaults)
+
+    const fnStart = source.indexOf('function hyperstache.revoke(')
+    const fnEnd = source.indexOf('\nend', fnStart)
+    const fnBody = source.slice(fnStart, fnEnd)
+
+    expect(fnBody).toContain('_sync_state()')
+  })
+
+  it('revoke() skips _sync_state on early return when address not in ACL', async () => {
+    const source = await generateRuntimeSource(defaults)
+
+    const fnStart = source.indexOf('function hyperstache.revoke(')
+    const fnEnd = source.indexOf('\nend', fnStart)
+    const fnBody = source.slice(fnStart, fnEnd)
+
+    // The early return should come before _sync_state
+    const earlyReturn = fnBody.indexOf('return')
+    const syncCall = fnBody.indexOf('_sync_state()')
+    expect(earlyReturn).toBeLessThan(syncCall)
   })
 })

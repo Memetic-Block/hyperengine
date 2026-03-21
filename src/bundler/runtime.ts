@@ -8,6 +8,8 @@ export interface RuntimeOptions {
   handlers: boolean
   /** Top-level key for patch@1.0 publishing (default: "ui") */
   patchKey: string
+  /** Key under which hyperstache_templates and hyperstache_acl are synced to patch@1.0 (default: "hyperstache_state") */
+  stateKey: string
 }
 
 /**
@@ -51,6 +53,12 @@ export async function generateRuntimeSource(options: RuntimeOptions): Promise<st
   source = source.replace(
     'local _patch_key = "ui"',
     `local _patch_key = "${options.patchKey}"`,
+  )
+
+  // Inject the configured state key
+  source = source.replace(
+    'local _state_key = "hyperstache_state"',
+    `local _state_key = "${options.stateKey}"`,
   )
 
   if (options.handlers) {
