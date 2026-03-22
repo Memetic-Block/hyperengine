@@ -345,7 +345,7 @@ describe('generateRuntimeSource', () => {
     expect(fnBody).toContain('device = "patch@1.0"')
     expect(fnBody).toContain('[_state_key]')
     expect(fnBody).toContain('templates = hyperstache_templates')
-    expect(fnBody).toContain('acl = hyperstache_acl')
+    expect(fnBody).toContain("state['acl_'..address]")
   })
 
   it('calls _sync_state() at init after seeding templates and acl', async () => {
@@ -419,5 +419,157 @@ describe('generateRuntimeSource', () => {
     const earlyReturn = fnBody.indexOf('return')
     const syncCall = fnBody.indexOf('_sync_state()')
     expect(earlyReturn).toBeLessThan(syncCall)
+  })
+
+  it('initializes hyperstache_published global with defensive pattern', async () => {
+    const source = await generateRuntimeSource(defaults)
+
+    expect(source).toContain('if not hyperstache_published then')
+    expect(source).toContain('hyperstache_published = {}')
+  })
+
+  it('exposes publishTemplate() that renders, registers, and publishes', async () => {
+    const source = await generateRuntimeSource(defaults)
+
+    expect(source).toContain('function hyperstache.publishTemplate(key, patchPath, data, partials)')
+
+    const fnStart = source.indexOf('function hyperstache.publishTemplate(')
+    const fnEnd = source.indexOf('\nend', fnStart)
+    const fnBody = source.slice(fnStart, fnEnd)
+
+    // Should register in hyperstache_published
+    expect(fnBody).toContain('hyperstache_published[patchPath]')
+    // Should render to get HTML
+    expect(fnBody).toContain('hyperstache.renderTemplate(key,')
+    // Should store in patches
+    expect(fnBody).toContain('hyperstache_patches[patchPath] = html')
+    // Should send to patch device
+    expect(fnBody).toContain('device = "patch@1.0"')
+    expect(fnBody).toContain('[_patch_key]')
+    // Should return the rendered HTML
+    expect(fnBody).toContain('return html')
+  })
+
+  it('publishTemplate() supports function data for callbacks', async () => {
+    const source = await generateRuntimeSource(defaults)
+
+    const fnStart = source.indexOf('function hyperstache.publishTemplate(')
+    const fnEnd = source.indexOf('\nend', fnStart)
+    const fnBody = source.slice(fnStart, fnEnd)
+
+    // Should detect function type
+    expect(fnBody).toContain('type(data) == "function"')
+    // Should store dataFn
+    expect(fnBody).toContain('dataFn = data')
+    // Should call function for initial data
+    expect(fnBody).toContain('renderData = data()')
+  })
+
+  it('exposes unpublishTemplate() that deregisters and clears patch', async () => {
+    const source = await generateRuntimeSource(defaults)
+
+    expect(source).toContain('function hyperstache.unpublishTemplate(patchPath)')
+
+    const fnStart = source.indexOf('function hyperstache.unpublishTemplate(')
+    const fnEnd = source.indexOf('\nend', fnStart)
+    const fnBody = source.slice(fnStart, fnEnd)
+
+    // Should remove from published registry
+    expect(fnBody).toContain('hyperstache_published[patchPath] = nil')
+    // Should remove from patches
+    expect(fnBody).toContain('hyperstache_patches[patchPath] = nil')
+    // Should send updated patches
+    expect(fnBody).toContain('device = "patch@1.0"')
+  })
+
+  it('set() calls _auto_rerender after _sync_state', async () => {
+    const source = await generateRuntimeSource(defaults)
+
+    const fnStart = source.indexOf('function hyperstache.set(')
+    const fnEnd = source.indexOf('\nend', fnStart)
+    const fnBody = source.slice(fnStart, fnEnd)
+
+    expect(fnBody).toContain('_auto_rerender(key)')
+    // _auto_rerender should come after _sync_state
+    const syncPos = fnBody.indexOf('_sync_state()')
+    const rerenderPos = fnBody.indexOf('_auto_rerender(key)')
+    expect(syncPos).toBeLessThan(rerenderPos)
+  })
+
+  it('remove() calls _auto_rerender and cleans up published entries', async () => {
+    const source = await generateRuntimeSource(defaults)
+
+    const fnStart = source.indexOf('function hyperstache.remove(')
+    const fnEnd = source.indexOf('\nend', fnStart)
+    const fnBody = source.slice(fnStart, fnEnd)
+
+    expect(fnBody).toContain('_auto_rerender(key)')
+    // Should clean up published entries for removed key
+    expect(fnBody).toContain('hyperstache_published[patchPath] = nil')
+    expect(fnBody).toContain('reg.key == key')
+  })
+
+  it('sync() re-renders all published templates', async () => {
+    const source = await generateRuntimeSource(defaults)
+
+    const fnStart = source.indexOf('function hyperstache.sync()')
+    const fnEnd = source.indexOf('\nend', fnStart)
+    const fnBody = source.slice(fnStart, fnEnd)
+
+    // Should iterate published registry
+    expect(fnBody).toContain('for patchPath, reg in pairs(hyperstache_published)')
+    // Should re-render using lustache
+    expect(fnBody).toContain('lustache.render')
+    // Should publish if anything changed
+    expect(fnBody).toContain('device = "patch@1.0"')
+  })
+
+  it('defines _find_partial_refs helper for mustache partial detection', async () => {
+    const source = await generateRuntimeSource(defaults)
+
+    expect(source).toContain('local function _find_partial_refs(content)')
+    // Should use gmatch for mustache partial syntax
+    expect(source).toContain('{{>%s*([%w_%.%-/]+)%s*}}')
+  })
+
+  it('defines _depends_on helper for transitive partial dependency check', async () => {
+    const source = await generateRuntimeSource(defaults)
+
+    expect(source).toContain('local function _depends_on(template_key, changed_key, seen)')
+
+    const fnStart = source.indexOf('local function _depends_on(')
+    const fnEnd = source.indexOf('\nend\n', fnStart)
+    const fnBody = source.slice(fnStart, fnEnd)
+
+    // Should use cycle detection
+    expect(fnBody).toContain('seen[template_key]')
+    // Should call _find_partial_refs
+    expect(fnBody).toContain('_find_partial_refs(content)')
+    // Should check direct match
+    expect(fnBody).toContain('refs[changed_key]')
+    // Should recurse
+    expect(fnBody).toContain('_depends_on(ref_key, changed_key, seen)')
+  })
+
+  it('defines _auto_rerender helper for batch re-rendering published templates', async () => {
+    const source = await generateRuntimeSource(defaults)
+
+    expect(source).toContain('local function _auto_rerender(changed_key)')
+
+    const fnStart = source.indexOf('local function _auto_rerender(')
+    const fnEnd = source.indexOf('\nend\n', fnStart)
+    const fnBody = source.slice(fnStart, fnEnd)
+
+    // Should iterate published registry
+    expect(fnBody).toContain('for patchPath, reg in pairs(hyperstache_published)')
+    // Should check direct key match and dependency
+    expect(fnBody).toContain('reg.key == changed_key')
+    expect(fnBody).toContain('_depends_on(reg.key, changed_key)')
+    // Should support dataFn callback
+    expect(fnBody).toContain('type(reg.dataFn) == "function"')
+    // Should use pcall for safe rendering
+    expect(fnBody).toContain('pcall(lustache.render')
+    // Should batch publish
+    expect(fnBody).toContain('device = "patch@1.0"')
   })
 })

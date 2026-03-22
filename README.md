@@ -27,6 +27,7 @@ Bundled artifacts may optionally be output as aos modules ready to be build into
     - [Import Maps for External JS](#import-maps-for-external-js)
   - [ESM Mode](#esm-mode)
 - [Runtime Template Management](#runtime-template-management)
+  - [Auto Re-render (publishTemplate)](#auto-re-render-publishtemplate)
   - [AO Message Handlers](#ao-message-handlers)
   - [Access Control (ACL)](#access-control-acl)
     - [Granting Roles](#granting-roles)
@@ -547,6 +548,44 @@ The runtime module:
 - **Partials support** — Both render methods accept an optional third argument: a table of partials (keyed by name, values are template strings). All registered `hyperstache_templates` are automatically available as partials, so `{{>index.html}}` works in any template without extra setup. Explicit partials override same-named keys from the template store.
 - **Publish to patch@1.0** — `hs.publish(patches)` sends rendered content to `patch@1.0`, nesting the payload under the configured `patchKey` (default `"ui"`). This prevents raw HTML from appearing in message headers, which would otherwise break `@permaweb/aoconnect` methods. The JSON device lazylink-encodes the HTML within the nested key. Patches are accumulated in the persistent `hyperstache_patches` global — each call merges new keys and sends the full state, so no previously-published pages are lost. Use `hs.patch(patches)` to register content without sending (useful during init when multiple modules contribute pages before the first publish).
 - **Auto-sync state to patch@1.0** — `hyperstache_templates` and `hyperstache_acl` are automatically sent to `patch@1.0` under the configured `stateKey` (default `"hyperstache_state"`) whenever they change (`set`, `remove`, `sync`, `grant`, `revoke`) and at init. The state is nested as `{ templates = hyperstache_templates, acl = hyperstache_acl }`, making it fetchable via URL GET on HyperBEAM mainnet at `/<process_id>/now/hyperstache_state/templates/...` and `/<process_id>/now/hyperstache_state/acl/...`. No manual publish step is needed for template or ACL state.
+
+### Auto Re-render (publishTemplate)
+
+Use `hs.publishTemplate()` to render a template, publish it to `patch@1.0`, and **automatically re-render** whenever the source template (or any partial it depends on) is updated at runtime:
+
+```lua
+local hs = require('hyperstache')
+
+-- Render and publish 'index.html' under the patch path 'page'
+-- If someone later calls hs.set('index.html', newContent), the page
+-- will automatically re-render and re-publish with the same data.
+hs.publishTemplate('index.html', 'page', { title = 'Hello', user = 'Alice' })
+
+-- Use a callback function for dynamic data (re-fetched on each re-render)
+-- Note: function callbacks do not persist across AO process reloads
+hs.publishTemplate('dashboard.html', 'dashboard', function()
+  return { stats = getStats(), timestamp = os.time() }
+end)
+
+-- Partials are tracked transitively — if index.html includes {{>header.html}},
+-- updating header.html will also trigger a re-render of the page.
+hs.publishTemplate('index.html', 'page', { title = 'Hello' }, {
+  footer = '<footer>Custom</footer>'
+})
+
+-- Stop auto-re-rendering and remove a published path
+hs.unpublishTemplate('page')
+```
+
+**How it works:**
+
+- `publishTemplate(key, patchPath, data, partials)` renders the template, stores the registration in the persistent `hyperstache_published` global, and publishes the result to `patch@1.0` under the configured `patchKey`.
+- When `set()` or `remove()` modifies a template, all published templates whose source key matches — or whose template transitively depends on the changed key via mustache partials (`{{>name}}`) — are automatically re-rendered and re-published in a single batched `Send`.
+- When `sync()` overwrites templates from the bundle, all published templates are re-rendered.
+- The `data` argument can be a **table** (persisted across AO process reloads) or a **function** (called on each render for fresh data; lost on process reload since functions can't be serialized).
+- Re-render failures (e.g., missing template after removal) are silently skipped via `pcall` — they won't crash your process.
+
+The admin interface uses `publishTemplate` internally, so editing `admin/index.html` via `Hyperstache-Set` automatically re-renders and re-publishes the admin UI.
 
 ### AO Message Handlers
 

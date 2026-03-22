@@ -1,13 +1,27 @@
-import { message, result, dryrun } from '@permaweb/aoconnect'
+import { connect, createSigner } from '@permaweb/aoconnect'
 
-const PROCESS = '{{ process_id }}'
-const SCHEDULER = '{{ scheduler }}'
+const PROCESS_ID = window.AO_ENV.Process.Id;
+const HB_URL = window.location.protocol + '//' + window.location.host;
+console.log('Admin interface for process', PROCESS_ID, 'on with ao.env', window.AO_ENV);
+const ao = connect({
+  MODE: 'mainnet',
+  signer: createSigner(window.arweaveWallet),
+  URL: HB_URL,
+  SCHEDULER: window.AO_ENV.Process.Tags.Scheduler
+})
 
 async function send(action, tags, data) {
   const t = [{ name: 'Action', value: action }];
   if (tags) Object.entries(tags).forEach(([k, v]) => t.push({ name: k, value: v }));
-  const mid = await message({ process: PROCESS, tags: t, data: data || '' });
-  const res = await result({ process: PROCESS, message: mid });
+  console.log('send message', { action, tags, data });
+  const mid = await ao.message({
+    process: PROCESS_ID,
+    tags: t,
+    data: data || '',
+    signer: createSigner(window.arweaveWallet)
+  });
+  const res = await ao.result({ process: PROCESS_ID, message: mid });
+  console.log('send result', res);
   const out = res.Messages && res.Messages[0];
   if (out && out.Tags) {
     const errTag = out.Tags.find(t => t.name === 'Error');
@@ -16,12 +30,69 @@ async function send(action, tags, data) {
   return out ? out.Data : '';
 }
 
-async function dry(action, tags, data) {
-  const t = [{ name: 'Action', value: action }];
-  if (tags) Object.entries(tags).forEach(([k, v]) => t.push({ name: k, value: v }));
-  const res = await dryrun({ process: PROCESS, tags: t, data: data || '' });
-  const out = res.Messages && res.Messages[0];
-  return out ? out.Data : '';
+async function fetchState() {
+  const res = await fetch(`${HB_URL}/${PROCESS_ID}/now/hyperstache_state/serialize~json@1.0`)
+  const state = await res.json();
+  console.log('got state', state)
+  return state
+}
+
+async function fetchTemplate(template_key) {
+  const res = await fetch(`${HB_URL}/${PROCESS_ID}/now/hyperstache_state/templates/${template_key}`)
+  const template = await res.text();
+  console.log('got template', template.length, template.slice(0, 100))
+  return template
+}
+
+function showStatus(el, msg, ok) {
+  el.className = 'status ' + (ok ? 'ok' : 'err');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+async function loadTemplates() {
+  listEl.innerHTML = '<div class="list-empty">Loading...</div>';
+  try {
+    const state = await fetchState();
+    console.log('got state', state);
+    const keys = state.template_keys ? state.template_keys.split(',').filter(Boolean) : [];
+    if (!keys.length) { listEl.innerHTML = '<div class="list-empty">No templates</div>'; return; }
+    listEl.innerHTML = keys.map(k =>
+      '<div class="list-item"><span data-key="' + k + '">' + k + '</span>' +
+      '<div class="actions"><button class="secondary" data-edit="' + k + '">Edit</button>' +
+      '<button class="danger" data-del="' + k + '">Delete</button></div></div>'
+    ).join('');
+  } catch (e) { listEl.innerHTML = '<div class="list-empty">Error: ' + e.message + '</div>'; }
+}
+
+async function loadACL() {
+  aclList.innerHTML = '<div class="list-empty">Loading...</div>';
+  try {
+    const state = await fetchState();
+    const acl = {}
+    for (const k in state) {
+      if (k.startsWith('acl_')) {
+        const addr = k.slice(4);
+        const roles = state[k].split(',').filter(Boolean);
+        if (roles.length) acl[addr] = roles;
+      }
+    }
+    const addresses = Object.keys(acl);
+    if (!addresses.length) { aclList.innerHTML = '<div class="list-empty">No roles assigned</div>'; return; }
+    aclList.innerHTML = addresses.map(addr => {
+      const roles = acl[addr].join(', ');
+      return '<div class="list-item"><span>' + addr + ' -> ' + roles + '</span>' +
+        '<div class="actions"><button class="danger" data-revoke-addr="' + addr + '" data-revoke-roles="' + roles + '">Revoke</button></div></div>';
+    }).join('');
+  } catch (e) { aclList.innerHTML = '<div class="list-empty">Error: ' + e.message + '</div>'; }
+}
+
+async function loadPreviewKeys() {
+  try {
+    const raw = await fetchState('Hyperstache-List');
+    const keys = raw ? raw.split('\n').filter(Boolean) : [];
+    previewKey.innerHTML = '<option value="">Select...</option>' + keys.map(k => '<option value="' + k + '">' + k + '</option>').join('');
+  } catch {}
 }
 
 // --- Tabs ---
@@ -41,26 +112,6 @@ const keyInput = document.getElementById('tpl-key');
 const contentInput = document.getElementById('tpl-content');
 const editorStatus = document.getElementById('editor-status');
 
-function showStatus(el, msg, ok) {
-  el.className = 'status ' + (ok ? 'ok' : 'err');
-  el.textContent = msg;
-  el.classList.remove('hidden');
-}
-
-async function loadTemplates() {
-  listEl.innerHTML = '<div class="list-empty">Loading...</div>';
-  try {
-    const raw = await dry('Hyperstache-List');
-    const keys = raw ? raw.split('\n').filter(Boolean) : [];
-    if (!keys.length) { listEl.innerHTML = '<div class="list-empty">No templates</div>'; return; }
-    listEl.innerHTML = keys.map(k =>
-      '<div class="list-item"><span data-key="' + k + '">' + k + '</span>' +
-      '<div class="actions"><button class="secondary" data-edit="' + k + '">Edit</button>' +
-      '<button class="danger" data-del="' + k + '">Delete</button></div></div>'
-    ).join('');
-  } catch (e) { listEl.innerHTML = '<div class="list-empty">Error: ' + e.message + '</div>'; }
-}
-
 listEl.addEventListener('click', async (e) => {
   const edit = e.target.dataset.edit || e.target.closest('[data-key]')?.dataset.key;
   const del = e.target.dataset.del;
@@ -70,7 +121,9 @@ listEl.addEventListener('click', async (e) => {
     loadTemplates(); loadPreviewKeys();
   } else if (edit) {
     keyInput.value = edit;
-    try { contentInput.value = await dry('Hyperstache-Get', { Key: edit }); } catch { contentInput.value = ''; }
+    try {
+      contentInput.value = await fetchTemplate(edit);
+    } catch { contentInput.value = ''; }
     editorEl.classList.remove('hidden'); editorStatus.className = 'hidden';
   }
 });
@@ -91,20 +144,6 @@ document.getElementById('btn-refresh').addEventListener('click', loadTemplates);
 const aclList = document.getElementById('acl-list');
 const grantForm = document.getElementById('grant-form');
 const grantStatus = document.getElementById('grant-status');
-
-async function loadACL() {
-  aclList.innerHTML = '<div class="list-empty">Loading...</div>';
-  try {
-    const raw = await dry('Hyperstache-Get-Roles');
-    if (!raw.trim()) { aclList.innerHTML = '<div class="list-empty">No roles assigned</div>'; return; }
-    const lines = raw.split('\n').filter(Boolean);
-    aclList.innerHTML = lines.map(line => {
-      const [addr, roles] = line.split(':');
-      return '<div class="list-item"><span>' + addr + ' — ' + roles + '</span>' +
-        '<div class="actions"><button class="danger" data-revoke-addr="' + addr + '" data-revoke-roles="' + roles + '">Revoke</button></div></div>';
-    }).join('');
-  } catch (e) { aclList.innerHTML = '<div class="list-empty">Error: ' + e.message + '</div>'; }
-}
 
 aclList.addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-revoke-addr]');
@@ -132,21 +171,13 @@ const previewKey = document.getElementById('preview-key');
 const previewData = document.getElementById('preview-data');
 const previewOutput = document.getElementById('preview-output');
 
-async function loadPreviewKeys() {
-  try {
-    const raw = await dry('Hyperstache-List');
-    const keys = raw ? raw.split('\n').filter(Boolean) : [];
-    previewKey.innerHTML = '<option value="">Select...</option>' + keys.map(k => '<option value="' + k + '">' + k + '</option>').join('');
-  } catch {}
-}
-
 document.getElementById('btn-render').addEventListener('click', async () => {
   const key = previewKey.value;
   if (!key) return;
   let data;
   try { data = JSON.parse(previewData.value); } catch { previewOutput.textContent = 'Invalid JSON'; return; }
   try {
-    const html = await dry('Hyperstache-Render', { Key: key }, JSON.stringify(data));
+    const html = await fetchState('Hyperstache-Render', { Key: key }, JSON.stringify(data));
     previewOutput.innerHTML = html;
   } catch (err) { previewOutput.textContent = 'Error: ' + err.message; }
 });
