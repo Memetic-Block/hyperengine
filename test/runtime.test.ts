@@ -429,7 +429,7 @@ describe('generateRuntimeSource', () => {
   it('exposes publishTemplate() that renders, registers, and publishes', async () => {
     const source = await generateRuntimeSource(defaults)
 
-    expect(source).toContain('function hyperstache.publishTemplate(key, patchPath, data, partials)')
+    expect(source).toContain('function hyperstache.publishTemplate(key, patchPath, data, partials, statePath)')
 
     const fnStart = source.indexOf('function hyperstache.publishTemplate(')
     const fnEnd = source.indexOf('\nend', fnStart)
@@ -569,5 +569,119 @@ describe('generateRuntimeSource', () => {
     expect(fnBody).toContain('pcall(lustache.render')
     // Should batch publish
     expect(fnBody).toContain('device = "patch@1.0"')
+  })
+
+  it('defines _resolve_path helper for Lua global path resolution', async () => {
+    const source = await generateRuntimeSource(defaults)
+
+    expect(source).toContain('local function _resolve_path(path)')
+
+    const fnStart = source.indexOf('local function _resolve_path(')
+    const fnEnd = source.indexOf('\nend\n', fnStart)
+    const fnBody = source.slice(fnStart, fnEnd)
+
+    // Should start from _G
+    expect(fnBody).toContain('local current = _G')
+    // Should split on dots
+    expect(fnBody).toContain('path:gmatch("[^%.]+")') 
+    // Should walk table segments
+    expect(fnBody).toContain('current = current[segment]')
+    // Should handle non-table intermediaries
+    expect(fnBody).toContain('type(current) ~= "table"')
+  })
+
+  it('exposes listPublished() that returns serializable view of published', async () => {
+    const source = await generateRuntimeSource(defaults)
+
+    expect(source).toContain('function hyperstache.listPublished()')
+
+    const fnStart = source.indexOf('function hyperstache.listPublished()')
+    const fnEnd = source.indexOf('\nend', fnStart)
+    const fnBody = source.slice(fnStart, fnEnd)
+
+    // Should iterate hyperstache_published
+    expect(fnBody).toContain('for patchPath, reg in pairs(hyperstache_published)')
+    // Should return key and statePath
+    expect(fnBody).toContain('key = reg.key')
+    expect(fnBody).toContain('statePath = reg.statePath')
+  })
+
+  it('publishTemplate() stores statePath in registration', async () => {
+    const source = await generateRuntimeSource(defaults)
+
+    const fnStart = source.indexOf('function hyperstache.publishTemplate(')
+    const fnEnd = source.indexOf('\nend', fnStart)
+    const fnBody = source.slice(fnStart, fnEnd)
+
+    // Should store statePath in published entry
+    expect(fnBody).toContain('statePath = statePath')
+  })
+
+  it('_sync_state includes published_keys', async () => {
+    const source = await generateRuntimeSource(defaults)
+
+    const fnStart = source.indexOf('function hyperstache._sync_state()')
+    const fnEnd = source.indexOf('\nend', fnStart)
+    const fnBody = source.slice(fnStart, fnEnd)
+
+    expect(fnBody).toContain("published_keys = ''")
+    expect(fnBody).toContain('for patchPath, _ in pairs(hyperstache_published)')
+    expect(fnBody).toContain("state.published_keys = state.published_keys .. patchPath")
+  })
+
+  it('registers Hyperstache-Publish-Template handler', async () => {
+    const source = await generateRuntimeSource(defaults)
+
+    expect(source).toContain('"Hyperstache-Publish-Template"')
+
+    const handlerStart = source.indexOf('"Hyperstache-Publish-Template"')
+    const handlerEnd = source.indexOf('end\n  )', handlerStart)
+    const handlerBody = source.slice(handlerStart, handlerEnd)
+
+    // Permission gated
+    expect(handlerBody).toContain('hyperstache.has_permission(msg.From, "Hyperstache-Publish-Template")')
+    // Requires Key and Path tags
+    expect(handlerBody).toContain('msg.Tags.Key or msg.Tags.key')
+    expect(handlerBody).toContain('msg.Tags.Path or msg.Tags.path')
+    // Supports optional State-Path tag
+    expect(handlerBody).toContain('msg.Tags["State-Path"]')
+    // Uses _resolve_path for state path
+    expect(handlerBody).toContain('_resolve_path(statePath)')
+    // Calls publishTemplate
+    expect(handlerBody).toContain('hyperstache.publishTemplate')
+  })
+
+  it('registers Hyperstache-Unpublish-Template handler', async () => {
+    const source = await generateRuntimeSource(defaults)
+
+    expect(source).toContain('"Hyperstache-Unpublish-Template"')
+
+    const handlerStart = source.indexOf('"Hyperstache-Unpublish-Template"')
+    const handlerEnd = source.indexOf('end\n  )', handlerStart)
+    const handlerBody = source.slice(handlerStart, handlerEnd)
+
+    // Permission gated
+    expect(handlerBody).toContain('hyperstache.has_permission(msg.From, "Hyperstache-Unpublish-Template")')
+    // Requires Path tag
+    expect(handlerBody).toContain('msg.Tags.Path or msg.Tags.path')
+    // Calls unpublishTemplate
+    expect(handlerBody).toContain('hyperstache.unpublishTemplate(path)')
+  })
+
+  it('registers Hyperstache-List-Published handler (public, no permission check)', async () => {
+    const source = await generateRuntimeSource(defaults)
+
+    expect(source).toContain('"Hyperstache-List-Published"')
+
+    const handlerStart = source.indexOf('"Hyperstache-List-Published"')
+    const handlerEnd = source.indexOf('end\n  )', handlerStart)
+    const handlerBody = source.slice(handlerStart, handlerEnd)
+
+    // Should NOT have permission check
+    expect(handlerBody).not.toContain('has_permission')
+    expect(handlerBody).not.toContain('assert')
+    // Should call listPublished and return JSON
+    expect(handlerBody).toContain('hyperstache.listPublished()')
+    expect(handlerBody).toContain('json.encode(published)')
   })
 })

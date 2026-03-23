@@ -12,7 +12,7 @@ for k, v in pairs(_bundled) do
 end
 
 if not hyperstache_acl then
-  hyperstache_acl = {}
+  hyperstache_acl = { [Owner] = { owner = true } }
 end
 
 if not hyperstache_patches then
@@ -24,6 +24,15 @@ if not hyperstache_published then
 end
 
 local lustache = require("lustache")
+
+local function _resolve_path(path)
+  local current = _G
+  for segment in path:gmatch("[^%.]+") do
+    if type(current) ~= "table" then return nil end
+    current = current[segment]
+  end
+  return current
+end
 
 local function _find_partial_refs(content)
   local refs = {}
@@ -74,34 +83,37 @@ local function _auto_rerender(changed_key)
 end
 
 local hyperstache = {}
-function hyperstache._sync_state()
+function hyperstache.get_state()
   local state = {
-    template_keys = ''
+    templates = {},
+    published = {},
+    acl = hyperstache_acl
   }
   for template_key, _ in pairs(hyperstache_templates) do
-    if state.template_keys ~= '' then
-      state.template_keys = state.template_keys .. ','
-    end
-    state.template_keys = state.template_keys .. template_key
+    table.insert(state.templates, template_key)
   end
-  for address, roles in pairs(hyperstache_acl) do
-    local role_list = ''
-    for role, _ in pairs(roles) do
-      if role_list ~= '' then
-        role_list = role_list .. ','
-      end
-      role_list = role_list .. role
-    end
-    state['acl_'..address] = role_list
+  for patchPath, _ in pairs(hyperstache_published) do
+    table.insert(state.published, patchPath)
   end
-  Send({
-    device = "patch@1.0",
-    [_state_key] = state,
-    hyperstache_templates = hyperstache_templates
-  })
+
+  return state
 end
 
-hyperstache._sync_state()
+function hyperstache._sync_state()
+  local hyperstache_state = hyperstache.get_state()
+  -- local hyperstache_admin = require('admin')
+  -- if hyperstache_admin then
+  --   hyperstache_admin.publish()
+  -- end
+  _auto_rerender('admin/index.html')
+  Send({
+    device = "patch@1.0",
+    [_patch_key] = hyperstache_patches,
+    [_state_key] = hyperstache_state,
+    hyperstache_templates = hyperstache_templates,
+    hyperstache_published = hyperstache_published
+  })
+end
 
 function hyperstache.get(key)
   return hyperstache_templates[key]
@@ -226,7 +238,18 @@ function hyperstache.get_roles(address)
   return hyperstache_acl
 end
 
-function hyperstache.publishTemplate(key, patchPath, data, partials)
+function hyperstache.listPublished()
+  local result = {}
+  for patchPath, reg in pairs(hyperstache_published) do
+    result[patchPath] = {
+      key = reg.key,
+      statePath = reg.statePath
+    }
+  end
+  return result
+end
+
+function hyperstache.publishTemplate(key, patchPath, data, partials, statePath)
   local dataFn = nil
   local renderData = data
   if type(data) == "function" then
@@ -238,10 +261,11 @@ function hyperstache.publishTemplate(key, patchPath, data, partials)
     key = key,
     data = (type(data) ~= "function") and data or nil,
     dataFn = dataFn,
-    partials = partials
+    partials = partials,
+    statePath = statePath
   }
   hyperstache_patches[patchPath] = html
-  Send({ device = "patch@1.0", [_patch_key] = hyperstache_patches })
+  hyperstache._sync_state()
   return html
 end
 
@@ -396,6 +420,62 @@ function hyperstache.handlers()
       end
     end
   )
+
+  Handlers.add("Hyperstache-Publish-Template",
+    Handlers.utils.hasMatchingTag("Action", "Hyperstache-Publish-Template"),
+    function(msg)
+      assert(hyperstache.has_permission(msg.From, "Hyperstache-Publish-Template"), "not authorized to publish templates")
+      local template_name = msg.Tags['Template-Name']
+      local publish_path = msg.Tags['Publish-Path']
+      assert(template_name, "Template-Name tag is required, got: " .. tostring(template_name))
+      assert(publish_path, "Publish-Path tag is required, got: " .. tostring(publish_path))
+      local statePath = msg.Tags["State-Path"] or msg.Tags["state-path"]
+      local data = {}
+      if statePath then
+        local resolved = _resolve_path(statePath)
+        if type(resolved) == "table" then
+          data = function() return _resolve_path(statePath) end
+        elseif type(resolved) == "function" then
+          data = resolved
+        end
+      elseif msg.Data and msg.Data ~= "" then
+        local ok, parsed = pcall(json.decode, msg.Data)
+        if ok and type(parsed) == "table" then
+          data = parsed
+        end
+      end
+      local ok, result = pcall(hyperstache.publishTemplate, template_name, publish_path, data, nil, statePath)
+      if ok then
+        Send({ Target = msg.From, Action = 'Hyperstache-Publish-Template-Response', Data = 'OK' })
+      else
+        Send({ Target = msg.From, Action = 'Hyperstache-Publish-Template-Response', Data = "", Error = tostring(result) })
+      end
+    end
+  )
+
+  Handlers.add("Hyperstache-Unpublish-Template",
+    Handlers.utils.hasMatchingTag("Action", "Hyperstache-Unpublish-Template"),
+    function(msg)
+      assert(hyperstache.has_permission(msg.From, "Hyperstache-Unpublish-Template"), "not authorized to unpublish templates")
+      local path = msg.Tags.Path or msg.Tags.path
+      assert(path, "Path tag is required, got: " .. tostring(path))
+      hyperstache.unpublishTemplate(path)
+      Send({ Target = msg.From, Action = 'Hyperstache-Unpublish-Template-Response', Data = 'OK' })
+    end
+  )
+
+  Handlers.add("Hyperstache-List-Published",
+    Handlers.utils.hasMatchingTag("Action", "Hyperstache-List-Published"),
+    function(msg)
+      local published = hyperstache.listPublished()
+      Send({ Target = msg.From, Action = 'Hyperstache-List-Published-Response', Data = json.encode(published) })
+    end
+  )
+end
+
+if not hyperstache_initialized then
+  hyperstache._sync_state()
+  hyperstache_initialized = true
 end
 
 return hyperstache

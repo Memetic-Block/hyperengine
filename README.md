@@ -579,7 +579,8 @@ hs.unpublishTemplate('page')
 
 **How it works:**
 
-- `publishTemplate(key, patchPath, data, partials)` renders the template, stores the registration in the persistent `hyperstache_published` global, and publishes the result to `patch@1.0` under the configured `patchKey`.
+- `publishTemplate(key, patchPath, data, partials, statePath)` renders the template, stores the registration in the persistent `hyperstache_published` global, and publishes the result to `patch@1.0` under the configured `patchKey`. The optional `statePath` string is stored alongside the registration for UI display (it records which Lua global the `data` function references).
+- `listPublished()` returns a serializable view of all published templates: `{ [patchPath] = { key, statePath } }`.
 - When `set()` or `remove()` modifies a template, all published templates whose source key matches — or whose template transitively depends on the changed key via mustache partials (`{{>name}}`) — are automatically re-rendered and re-published in a single batched `Send`.
 - When `sync()` overwrites templates from the bundle, all published templates are re-rendered.
 - The `data` argument can be a **table** (persisted across AO process reloads) or a **function** (called on each render for fresh data; lost on process reload since functions can't be serialized).
@@ -603,7 +604,7 @@ export default defineConfig({
 })
 ```
 
-This registers nine handlers:
+This registers twelve handlers:
 
 | Action                       | Tags              | Description                                                       | Access       |
 |------------------------------|-------------------|-------------------------------------------------------------------|--------------|
@@ -616,14 +617,17 @@ This registers nine handlers:
 | `Hyperstache-Grant-Role` | `Address`, `Role` | Grants an ACL role to an address        | Owner/Admin  |
 | `Hyperstache-Revoke-Role`| `Address`, `Role` | Revokes an ACL role from an address     | Owner/Admin  |
 | `Hyperstache-Get-Roles`  | `Address`         | Returns roles for an address (or all)   | Anyone       |
+| `Hyperstache-Publish-Template` | `Key`, `Path`, `State-Path`? | Publishes a rendered template at a patch path. Optional `State-Path` references a Lua global for live data. | Permitted |
+| `Hyperstache-Unpublish-Template` | `Path`       | Removes a published template from a patch path | Permitted |
+| `Hyperstache-List-Published` |                   | Returns JSON of all published templates (`{ path: { key, statePath } }`) | Anyone |
 
-Mutation operations (`Set`, `Remove`) are guarded by a permission check — the caller must be the process Owner, have the `admin` role, or have been granted the specific action (e.g. `Hyperstache-Set`).
+Mutation operations (`Set`, `Remove`, `Publish-Template`, `Unpublish-Template`) are guarded by a permission check — the caller must be the process Owner, have the `admin` role, or have been granted the specific action (e.g. `Hyperstache-Set`).
 
 You can also register handlers manually from your process code:
 
 ```lua
 local hs = require('hyperstache')
-hs.handlers()  -- registers all nine handlers
+hs.handlers()  -- registers all twelve handlers
 ```
 
 ### Access Control (ACL)
@@ -735,9 +739,9 @@ This creates four files under `src/admin/`:
 
 | File              | Purpose                                                         |
 |-------------------|-----------------------------------------------------------------|
-| `index.html`      | Admin UI HTML — three panels: templates, ACL, render preview    |
+| `index.html`      | Admin UI HTML — four panels: templates, ACL, render preview, publish |
 | `styles.css`      | Admin UI styles (dark theme, GitHub Primer-inspired)            |
-| `admin.js`        | Frontend logic — tab switching, template CRUD, ACL management   |
+| `admin.js`        | Frontend logic — tab switching, template CRUD, ACL management, publish management |
 | `init.lua`        | Lua handler module — render, publish, and sync handlers         |
 
 All four files are fully editable. The HTML references the CSS and JS via standard `<link>` and `<script>` tags, and the Vite template pipeline inlines them at build time — just like your regular templates.
@@ -785,13 +789,14 @@ The admin Lua module:
 - **Publishes to `patch@1.0`** after every mutation (template Set/Remove, role Grant/Revoke) via `hyperstache.publish()`, which sends the full accumulated state
 - **Stores the rendered HTML** in the `hyperstache_admin` global (auto-persisted by AO)
 
-The admin UI has three sections:
+The admin UI has four sections:
 
 | Section          | Description                                                |
 |------------------|------------------------------------------------------------||
 | **Templates**    | List, view, create, edit, and delete templates             |
 | **Access Control** | View all roles, grant roles to addresses, revoke roles   |
 | **Render Preview** | Select a template, provide JSON data, preview the output |
+| **Publish**      | Publish templates at custom paths, manage published templates, reference live process state |
 
 #### Custom Path Key
 

@@ -33,3 +33,5 @@ label { display: block; font-size: 0.8rem; color: #8b949e; margin-bottom: 0.25re
 .row { display: flex; gap: 0.75rem; }
 .row > * { flex: 1; }
 .hidden { display: none; }
+.hint { color: #484f58; font-weight: normal; }
+.pub-detail { color: #8b949e; font-size: 0.8rem; }

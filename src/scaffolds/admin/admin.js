@@ -2,7 +2,7 @@ import { connect, createSigner } from '@permaweb/aoconnect'
 
 const PROCESS_ID = window.AO_ENV.Process.Id;
 const HB_URL = window.location.protocol + '//' + window.location.host;
-console.log('Admin interface for process', PROCESS_ID, 'on with ao.env', window.AO_ENV);
+console.log('Admin interface for process', PROCESS_ID, 'on with ao.env', window.AO_ENV, 'and initial state', window.HYPERSTACHE_STATE);
 const ao = connect({
   MODE: 'mainnet',
   signer: createSigner(window.arweaveWallet),
@@ -102,7 +102,7 @@ async function loadACL() {
     if (!addresses.length) { aclList.innerHTML = '<div class="list-empty">No roles assigned</div>'; return; }
     aclList.innerHTML = addresses.map(addr => {
       const roles = acl[addr].join(', ');
-      return '<div class="list-item"><span>' + addr + ' : ' + roles + '</span>' +
+      return '<div class="list-item"><span>' + addr + ' &rarr; ' + roles + '</span>' +
         '<div class="actions"><button class="danger" data-revoke-addr="' + addr + '" data-revoke-roles="' + roles + '">Revoke</button></div></div>';
     }).join('');
   } catch (e) { aclList.innerHTML = '<div class="list-empty">Error: ' + e.message + '</div>'; }
@@ -116,13 +116,27 @@ async function loadPreviewKeys() {
   } catch {}
 }
 
-// --- Tabs ---
-document.querySelectorAll('.tab').forEach(tab => {
-  tab.addEventListener('click', () => {
+if (window.location.hash) {
+  setActiveTab(window.location.hash.slice(1));
+} else {
+  setActiveTab('templates');
+}
+
+function setActiveTab(tabName) {
+  const tab = document.querySelector(`.tab[data-tab="${tabName}"]`);
+  if (tab) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
     tab.classList.add('active');
     document.getElementById(tab.dataset.tab).classList.add('active');
+  }
+}
+
+// --- Tabs ---
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    window.location.hash = '#' + tab.dataset.tab;
+    setActiveTab(tab.dataset.tab);
   });
 });
 
@@ -173,18 +187,20 @@ document.getElementById('btn-save').addEventListener('click', async ({ target: s
     saveButton.textContent = 'Saving...';
     await send('Hyperstache-Set', { Key: k }, contentInput.value);
     showStatus(editorStatus, 'Saved', true);
-    await loadTemplates();
-    await loadPreviewKeys();
+
+    // await loadTemplates();
+    // await loadPreviewKeys();
   } catch (err) {
     showStatus(editorStatus, err.message, false);
   } finally {
-    saveButton.disabled = false;
-    cancelButton.disabled = false;
-    saveButton.textContent = 'Save';
+    // window.location.reload();
+    // saveButton.disabled = false;
+    // cancelButton.disabled = false;
+    // saveButton.textContent = 'Save';
   }
 });
-// TODO -> debounce this
-document.getElementById('btn-refresh').addEventListener('click', () => { invalidateStateCache(); loadTemplates(); });
+
+// document.getElementById('btn-refresh').addEventListener('click', () => { invalidateStateCache(); loadTemplates(); });
 
 // --- ACL ---
 const aclList = document.getElementById('acl-list');
@@ -224,7 +240,7 @@ grantSubmitButton.addEventListener('click', async () => {
     grantSubmitButton.textContent = 'Granting...';
     await send('Hyperstache-Grant-Role', { Address: addr, Role: role });
     showStatus(grantStatus, 'Granted', true);
-    loadACL();
+    // loadACL();
   } catch (err) {
     showStatus(grantStatus, err.message, false);
   } finally {
@@ -233,7 +249,7 @@ grantSubmitButton.addEventListener('click', async () => {
     grantSubmitButton.textContent = 'Grant';
   }
 });
-document.getElementById('btn-acl-refresh').addEventListener('click', () => { invalidateStateCache(); loadACL(); });
+// document.getElementById('btn-acl-refresh').addEventListener('click', () => { invalidateStateCache(); loadACL(); });
 
 // --- Render Preview ---
 const previewKey = document.getElementById('preview-key');
@@ -259,12 +275,105 @@ renderButton.addEventListener('click', async () => {
   }
 });
 
-// --- Init ---
-loadTemplates();
+// --- Publish ---
+const publishedList = document.getElementById('published-list');
+const publishForm = document.getElementById('publish-form');
+const publishStatus = document.getElementById('publish-status');
+const publishKeySelect = document.getElementById('publish-key');
 
-// Lazy-load ACL & preview keys when their tabs first activate
-const obs = new MutationObserver(() => {
-  if (document.getElementById('acl').classList.contains('active')) loadACL();
-  if (document.getElementById('preview').classList.contains('active')) loadPreviewKeys();
+async function fetchPublished() {
+  const res = await fetch(`${HB_URL}/${PROCESS_ID}/now/hyperstache_published/serialize~json@1.0`);
+  if (!res.ok) throw new Error('Failed to fetch published: ' + res.statusText);
+  return res.json();
+}
+
+async function loadPublished() {
+  publishedList.innerHTML = '<div class="list-empty">Loading...</div>';
+  try {
+    const published = await fetchPublished();
+    const paths = Object.keys(published)
+      .filter(k => !['commitments', 'device'].includes(k))
+      .map(k => k.endsWith('+link') ? k.slice(0, -5) : k);
+    if (!paths.length) { publishedList.innerHTML = '<div class="list-empty">No published templates</div>'; return; }
+    publishedList.innerHTML = paths.map(p => {
+      const reg = published[p];
+      const detail = reg?.statePath
+        ? ' <span class="pub-detail">state: ' + reg.statePath + '</span>'
+        : '';
+      return '<div class="list-item"><span>' + p + ' &rarr; ' + (reg?.key || '?') + detail + '</span>' +
+        '<div class="actions"><button class="danger" data-unpublish="' + p + '">Unpublish</button></div></div>';
+    }).join('');
+  } catch (e) {
+    console.error(e);
+    publishedList.innerHTML = '<div class="list-empty">Error: ' + e.message + '</div>';
+  }
+}
+
+async function loadPublishKeys() {
+  try {
+    const state = await fetchState();
+    const keys = state.template_keys ? state.template_keys.split(',').filter(Boolean) : [];
+    publishKeySelect.innerHTML = '<option value="">Select...</option>' + keys.map(k => '<option value="' + k + '">' + k + '</option>').join('');
+  } catch {}
+}
+
+publishedList.addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-unpublish]');
+  if (!btn) return;
+  const path = btn.dataset.unpublish;
+  if (!confirm('Unpublish ' + path + '?')) return;
+  try {
+    btn.disabled = 'disabled';
+    btn.textContent = 'Unpublishing...';
+    await send('Hyperstache-Unpublish-Template', { Path: path });
+    loadPublished();
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Unpublish';
+  }
 });
-document.querySelectorAll('.panel').forEach(p => obs.observe(p, { attributes: true, attributeFilter: ['class'] }));
+
+document.getElementById('btn-publish-new').addEventListener('click', () => {
+  publishForm.classList.remove('hidden');
+  publishStatus.className = 'hidden';
+  loadPublishKeys();
+});
+const publishCancelButton = document.getElementById('btn-publish-cancel');
+publishCancelButton.addEventListener('click', () => publishForm.classList.add('hidden'));
+const publishSubmitButton = document.getElementById('btn-publish-submit');
+publishSubmitButton.addEventListener('click', async () => {
+  const key = publishKeySelect.value;
+  const path = document.getElementById('publish-path').value.trim();
+  if (!key || !path) { showStatus(publishStatus, 'Template and path are required', false); return; }
+  const statePath = document.getElementById('publish-state-path').value.trim();
+  const tags = { ['Template-Name']: key, ['Publish-Path']: path };
+  if (statePath) tags['State-Path'] = statePath;
+  try {
+    publishSubmitButton.disabled = 'disabled';
+    publishCancelButton.disabled = 'disabled';
+    publishSubmitButton.textContent = 'Publishing...';
+    await send('Hyperstache-Publish-Template', tags);
+    showStatus(publishStatus, 'Published', true);
+    loadPublished();
+  } catch (err) {
+    showStatus(publishStatus, err.message, false);
+  } finally {
+    publishSubmitButton.disabled = false;
+    publishCancelButton.disabled = false;
+    publishSubmitButton.textContent = 'Publish';
+  }
+});
+document.getElementById('btn-publish-refresh').addEventListener('click', () => { invalidateStateCache(); loadPublished(); });
+
+// --- Init ---
+// loadTemplates();
+
+// Lazy-load ACL, preview keys & published list when their tabs first activate
+// const obs = new MutationObserver(() => {
+//   if (document.getElementById('acl').classList.contains('active')) loadACL();
+//   if (document.getElementById('preview').classList.contains('active')) loadPreviewKeys();
+//   if (document.getElementById('publish').classList.contains('active')) loadPublished();
+// });
+// document.querySelectorAll('.panel').forEach(p => obs.observe(p, { attributes: true, attributeFilter: ['class'] }));

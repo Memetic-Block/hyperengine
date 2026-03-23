@@ -1,92 +1,145 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Hyperstache Admin</title>
-<script crossorigin type="module">globalThis.process={browser:!0,env:{}}</script>
-<script crossorigin type="module">window.AO_ENV = {{{ ao_env }}}</script>
-<link rel="stylesheet" href="./styles.css">
-</head>
-<body>
-<div class="container">
-  <h1>Hyperstache Admin</h1>
-  <div class="tabs">
-    <div class="tab active" data-tab="templates">Templates</div>
-    <div class="tab" data-tab="acl">Access Control</div>
-    <div class="tab" data-tab="preview">Render Preview</div>
-  </div>
+  <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hyperstache Admin</title>
+  <script crossorigin type="module">globalThis.process={browser:!0,env:{}}</script>
+  <script crossorigin type="module">
+    window.AO_ENV = {{{ ao_env_json }}}
+    window.HYPERSTACHE_STATE = {{{ hyperstache_state_json }}}
+  </script>
+  <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <div class="container">
+      <h1>Hyperstache Admin</h1>
+      <div class="tabs">
+        <div class="tab" data-tab="templates">Templates</div>
+        <div class="tab" data-tab="acl">Access Control</div>
+        <!-- <div class="tab" data-tab="preview">Render Preview</div> -->
+        <div class="tab" data-tab="publish">Publish</div>
+      </div>
 
-  <!-- Templates Panel -->
-  <div id="templates" class="panel active">
-    <div class="toolbar">
-      <button id="btn-new">New Template</button>
-      <button class="secondary" id="btn-refresh">Refresh</button>
-    </div>
-    <div id="template-list" class="list"><div class="list-empty">Loading...</div></div>
-    <div id="template-editor" class="hidden" style="margin-top:1rem;">
-      <div id="editor-status"></div>
-      <div class="field">
-        <label for="tpl-key">Key</label>
-        <input id="tpl-key" placeholder="e.g. index.html">
-      </div>
-      <div class="field">
-        <label for="tpl-content">Content</label>
-        <textarea id="tpl-content" rows="12"></textarea>
-      </div>
-      <div class="actions">
-        <button id="btn-save">Save</button>
-        <button class="secondary" id="btn-cancel">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ACL Panel -->
-  <div id="acl" class="panel">
-    <div class="toolbar">
-      <button id="btn-grant">Grant Role</button>
-      <button class="secondary" id="btn-acl-refresh">Refresh</button>
-    </div>
-    <div id="acl-list" class="list"><div class="list-empty">Loading...</div></div>
-    <div id="grant-form" class="hidden" style="margin-top:1rem;">
-      <div id="grant-status"></div>
-      <div class="field">
-        <label for="grant-address">Address</label>
-        <input id="grant-address" placeholder="Wallet address">
-      </div>
-      <div class="field">
-        <label for="grant-role">Role</label>
-        <input id="grant-role" placeholder="e.g. admin, Hyperstache-Set">
-      </div>
-      <div class="actions">
-        <button id="btn-grant-submit">Grant</button>
-        <button class="secondary" id="btn-grant-cancel">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Render Preview Panel -->
-  <div id="preview" class="panel">
-    <div class="row">
-      <div>
-        <div class="field">
-          <label for="preview-key">Template</label>
-          <select id="preview-key"><option value="">Select...</option></select>
+      <!-- Templates Panel -->
+      <div id="templates" class="panel">
+        <div class="toolbar">
+          <button id="btn-new">New Template</button>
+          <button class="secondary" id="btn-refresh" onclick="window.location.hash = '#templates'; window.location.reload()">Refresh</button>
         </div>
-        <div class="field">
-          <label for="preview-data">Data (JSON)</label>
-          <textarea id="preview-data" rows="8">{}</textarea>
+        <div id="template-list" class="list">
+          {{#hyperstache_state.templates}}
+          <div class="list-item"><span data-key="{{.}}">{{.}}</span>
+          <div class="actions"><button class="secondary" data-edit="{{.}}">Edit</button>
+          <button class="danger" data-del="{{.}}">Delete</button></div></div>
+          {{/hyperstache_state.templates}}
+          {{^hyperstache_state.templates}}
+          <div class="list-empty">No templates</div>
+          {{/hyperstache_state.templates}}
         </div>
-        <button id="btn-render">Render</button>
+        <div id="template-editor" class="hidden" style="margin-top:1rem;">
+          <div id="editor-status"></div>
+          <div class="field">
+            <label for="tpl-key">Key</label>
+            <input id="tpl-key" placeholder="e.g. index.html">
+          </div>
+          <div class="field">
+            <label for="tpl-content">Content</label>
+            <textarea id="tpl-content" rows="12"></textarea>
+          </div>
+          <div class="actions">
+            <button id="btn-save">Save</button>
+            <button class="secondary" id="btn-cancel">Cancel</button>
+          </div>
+        </div>
       </div>
-      <div>
-        <label>Output</label>
-        <div class="preview-frame" id="preview-output"></div>
+
+      <!-- ACL Panel -->
+      <div id="acl" class="panel">
+        <div class="toolbar">
+          <button id="btn-grant">Grant Role</button>
+          <button class="secondary" id="btn-acl-refresh" onclick="window.location.hash = '#acl'; window.location.reload()">Refresh</button>
+        </div>
+        <div id="acl-list" class="list">
+          {{#hyperstache_acl}}
+          <div class="list-item">
+            <span>{{address}} &rarr; {{roles}}</span>
+            <div class="actions">
+              <button class="danger" data-revoke-addr="{{address}}" data-revoke-roles="{{roles}}">Revoke</button>
+            </div>
+          </div>
+          {{/hyperstache_acl}}
+          {{^hyperstache_acl}}
+          <div class="list-empty">No roles assigned</div>
+          {{/hyperstache_acl}}
+        </div>
+        <div id="grant-form" class="hidden" style="margin-top:1rem;">
+          <div id="grant-status"></div>
+          <div class="field">
+            <label for="grant-address">Address</label>
+            <input id="grant-address" placeholder="Wallet address">
+          </div>
+          <div class="field">
+            <label for="grant-role">Role</label>
+            <input id="grant-role" placeholder="e.g. admin, Hyperstache-Set">
+          </div>
+          <div class="actions">
+            <button id="btn-grant-submit">Grant</button>
+            <button class="secondary" id="btn-grant-cancel">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Render Preview Panel -->
+      <div id="preview" class="panel">
+        <div class="row">
+          <div>
+            <div class="field">
+              <label for="preview-key">Template</label>
+              <select id="preview-key"><option value="">Select...</option></select>
+            </div>
+            <div class="field">
+              <label for="preview-data">Data (JSON)</label>
+              <textarea id="preview-data" rows="8">{}</textarea>
+            </div>
+            <button id="btn-render">Render</button>
+          </div>
+          <div>
+            <label>Output</label>
+            <div class="preview-frame" id="preview-output"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Publish Panel -->
+      <div id="publish" class="panel">
+        <div class="toolbar">
+          <button id="btn-publish-new">Publish Template</button>
+          <button class="secondary" id="btn-publish-refresh" onclick="window.location.hash = '#publish'; window.location.reload()">Refresh</button>
+        </div>
+        <div id="published-list" class="list"><div class="list-empty">Loading...</div></div>
+        <div id="publish-form" class="hidden" style="margin-top:1rem;">
+          <div id="publish-status"></div>
+          <div class="field">
+            <label for="publish-key">Template</label>
+            <select id="publish-key"><option value="">Select...</option></select>
+          </div>
+          <div class="field">
+            <label for="publish-path">Path</label>
+            <input id="publish-path" placeholder="e.g. /home or /profile">
+          </div>
+          <div class="field">
+            <label for="publish-state-path">State Path <span class="hint">(Lua global, e.g. Profile or Config.theme)</span></label>
+            <input id="publish-state-path" placeholder="e.g. Profile">
+          </div>
+          <div class="actions">
+            <button id="btn-publish-submit">Publish</button>
+            <button class="secondary" id="btn-publish-cancel">Cancel</button>
+          </div>
+        </div>
       </div>
     </div>
-  </div>
-</div>
 
-<script type="module" src="./admin.js"></script>
-</body>
+    <script type="module" src="./admin.js"></script>
+  </body>
 </html>
