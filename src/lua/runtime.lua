@@ -381,28 +381,28 @@ end
 --- - A **table**: stored as static data, re-used on each auto-rerender.
 --- - A **function**: called on each render to produce fresh data (useful for live dashboards).
 ---
----@param key string Template key to render
----@param patchPath string Path to publish rendered output to via `patch@1.0`
+---@param template_key string Template key to render
+---@param ui_path string Path to publish rendered output to via `patch@1.0`
 ---@param data? DataProvider Data table or function returning data for rendering
 ---@param partials? TemplateMap Additional partials for rendering
 ---@param statePath? string Dot-notation path to a Lua global used as dynamic data source
 ---@return string html The rendered HTML output
-function hyperstache.publishTemplate(key, patchPath, data, partials, statePath)
+function hyperstache.publishTemplate(template_key, ui_path, data, partials, statePath)
   local dataFn = nil
   local renderData = data
   if type(data) == "function" then
     dataFn = data
     renderData = data()
   end
-  local html = hyperstache.renderTemplate(key, renderData or {}, partials)
-  hyperstache_published[patchPath] = {
-    key = key,
+  local html = hyperstache.renderTemplate(template_key, renderData or {}, partials)
+  hyperstache_published[ui_path] = {
+    key = template_key,
     data = (type(data) ~= "function") and data or nil,
     dataFn = dataFn,
     partials = partials,
     statePath = statePath
   }
-  hyperstache_patches[patchPath] = html
+  hyperstache_patches[ui_path] = html
   hyperstache._sync_state()
   return html
 end

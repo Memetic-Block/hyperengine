@@ -233,7 +233,7 @@ export function resolveDeployConfig(raw?: DeployConfig): ResolvedDeployConfig {
   }
 }
 
-const DEFAULT_EXTENSIONS = ['.html', '.htm', '.tmpl', '.mustache', '.mst', '.mu', '.stache']
+export const DEFAULT_EXTENSIONS = ['.html', '.htm', '.tmpl', '.mustache', '.mst', '.mu', '.stache']
 
 const CONFIG_FILES = [
   'hyperstache.config.ts',

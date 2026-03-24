@@ -1,5 +1,6 @@
 import { collectTemplatesFromDir } from './templates.js'
 import type { TemplateEntry } from './templates.js'
+import { DEFAULT_EXTENSIONS } from '../config.js'
 
 export interface AdminOptions {
   /** Absolute path to the admin source directory */
@@ -15,6 +16,6 @@ export interface AdminOptions {
  * with "admin/" so they sit alongside user templates without collision.
  */
 export async function collectAdminTemplates(options: AdminOptions): Promise<TemplateEntry[]> {
-  const extensions = options.extensions ?? ['.html', '.htm']
+  const extensions = options.extensions ?? DEFAULT_EXTENSIONS
   return collectTemplatesFromDir(options.dir, extensions, 'admin/')
 }
