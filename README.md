@@ -503,7 +503,9 @@ Without `esm`, the default behavior is unchanged: `type="module"` is stripped fr
 
 ## Runtime Template Management
 
-Hyperstache automatically bundles a `hyperstache` Lua runtime module into every process for managing templates after deployment. You can require it in your Lua process:
+Hyperstache automatically bundles a `hyperstache` Lua runtime module into every process for managing templates after deployment. The runtime source includes [LuaDoc annotations](https://luals.github.io/wiki/annotations/) (`---@param`, `---@return`, `---@class`, `---@alias`, etc.) for full IDE autocompletion and type checking in editors that support the [Lua Language Server](https://github.com/LuaLS/lua-language-server).
+
+You can require it in your Lua process:
 
 ```lua
 local hs = require('hyperstache')
