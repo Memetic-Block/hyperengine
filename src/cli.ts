@@ -69,26 +69,6 @@ program
   })
 
 program
-  .command('dev')
-  .description('Start Vite dev server with hyperstache plugin')
-  .option('-r, --root <dir>', 'Project root directory', '.')
-  .option('-p, --process <name>', 'Watch/bundle only the named process')
-  .action(async (opts) => {
-    const root = resolve(opts.root)
-    const { createServer } = await import('vite')
-    const { hyperstache } = await import('./vite-plugin.js')
-    const config = await loadConfig(root)
-
-    const server = await createServer({
-      root,
-      plugins: [hyperstache({ ...config, filterProcess: opts.process })],
-    })
-
-    await server.listen()
-    server.printUrls()
-  })
-
-program
   .command('rockspec')
   .description('Generate a .rockspec file from config')
   .option('-r, --root <dir>', 'Project root directory', '.')

@@ -1,16 +1,12 @@
 {
   "name": "@memetic-block/hyperstache",
   "version": "0.0.1",
-  "description": "Framework for bundling AO Lua processes with Mustache templating, Luarocks support, and Vite",
+  "description": "Framework for bundling AO Lua processes with Mustache templating and Luarocks support",
   "type": "module",
   "exports": {
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
-    },
-    "./vite": {
-      "import": "./dist/vite.js",
-      "types": "./dist/vite.d.ts"
     }
   },
   "main": "./dist/index.js",
@@ -34,9 +30,9 @@
     "arweave",
     "hyperbeam",
     "lua",
+    "vite",
     "mustache",
     "lustache",
-    "vite",
     "bundler",
     "luarocks"
   ],

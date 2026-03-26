@@ -1,7 +1,7 @@
 # hyperstache
 
 Framework for bundling [AO](https://ao.arweave.net) Lua processes for deployment on [HyperBEAM](https://hyperbeam.arweave.net) with
-[Mustache](https://mustache.github.io/) templating, [Luarocks](https://luarocks.org/) support, and [Vite](https://vite.dev/).
+[Mustache](https://mustache.github.io/) templating and [Luarocks](https://luarocks.org/) support.
 
 HTML templates are inlined as Lua string constants and rendered at runtime using [lustache](https://github.com/Olivine-Labs/lustache) inside the AO process.
 
@@ -48,7 +48,6 @@ Bundled artifacts may optionally be output as aos modules ready to be build into
 - [CLI](#cli)
 - [Configuration](#configuration)
   - [Full Config Interface](#full-config-interface)
-- [Vite Plugin](#vite-plugin)
 - [How It Works](#how-it-works)
 - [Deploy & Publish](#deploy--publish)
   - [Configuration](#deploy-configuration)
@@ -109,7 +108,7 @@ npx hyperstache create my-app --directory ~/projects
 | `--admin`      | Scaffolds admin UI files into `src/admin/` and enables admin interface in config  |
 | `--directory`  | Parent directory for the new project (default: current dir)   |
 
-All scaffolded projects include Vite template processing, CSS, and a dev server out of the box.
+All scaffolded projects include Vite template processing and CSS out of the box.
 
 Then install luarocks dependencies and build:
 
@@ -1201,9 +1200,6 @@ hyperstache build
 # Bundle a specific process
 hyperstache build --process main
 
-# Start Vite dev server with live-reload on Lua/template changes
-hyperstache dev
-
 # Generate a .rockspec from config
 hyperstache rockspec
 
@@ -1227,7 +1223,6 @@ hyperstache deploy --debug
 |------------|------------------------------------------------------------------|
 | `create`   | Scaffold a new hyperstache project                               |
 | `build`    | Resolve Lua modules, inline templates, emit `.lua` bundles       |
-| `dev`      | Start Vite dev server with the hyperstache plugin                |
 | `rockspec` | Generate a `.rockspec` file from luarocks config                 |
 | `publish`  | Upload WASM or Lua modules to Arweave via Turbo                  |
 | `deploy`   | Spawn AO processes and load bundled Lua code                     |
@@ -1235,7 +1230,7 @@ hyperstache deploy --debug
 Options for all commands:
 
 - `-r, --root <dir>` — Project root directory (default: `.`)
-- `-p, --process <name>` — Target a specific process (build/dev/publish/deploy)
+- `-p, --process <name>` — Target a specific process (build/publish/deploy)
 
 Options for `deploy` and `publish`:
 
@@ -1321,34 +1316,6 @@ export default defineConfig({
   },
 })
 ```
-
-## Vite Plugin
-
-Use directly in a `vite.config.ts` for full control:
-
-```ts
-import { defineConfig } from 'vite'
-import { hyperstache } from 'hyperstache/vite'
-
-export default defineConfig({
-  plugins: [
-    hyperstache({
-      processes: {
-        main: { entry: 'src/process.lua' },
-      },
-      luarocks: {
-        dependencies: { lustache: '1.3.1-0' },
-      },
-    }),
-  ],
-})
-```
-
-The plugin:
-- Runs the Lua bundler on `buildStart`
-- Watches `.lua` and template files for changes
-- When `templates.vite` is enabled, also watches CSS/JS/TS files under the templates directory
-- Triggers a full-reload when Lua, template, or asset sources change
 
 ### Full Config Interface
 
