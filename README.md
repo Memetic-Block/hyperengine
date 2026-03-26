@@ -1,9 +1,9 @@
 # hyperstache
 
 Framework for bundling [AO](https://ao.arweave.net) Lua processes for deployment on [HyperBEAM](https://hyperbeam.arweave.net) with
-[Mustache](https://mustache.github.io/) templating and [Luarocks](https://luarocks.org/) support.
+[Mustache](https://mustache.github.io/) templating and optional [Luarocks](https://luarocks.org/) support.
 
-HTML templates are inlined as Lua string constants and rendered at runtime using [lustache](https://github.com/Olivine-Labs/lustache) inside the AO process.
+HTML templates are inlined as Lua string constants and rendered at runtime using a bundled [lustache](https://github.com/Olivine-Labs/lustache) engine inside the AO process.
 
 Optionally, templates can be processed through Vite before bundling — CSS, TypeScript, and other assets referenced by your HTML are compiled and inlined, producing fully self-contained templates with no external local dependencies.
 
@@ -60,9 +60,8 @@ Bundled artifacts may optionally be output as aos modules ready to be build into
 - [License](#license)
 
 ## Prerequisites
-You will need [luarocks](https://luarocks.org/#quick-start) installed in order to resolve
-[lustache](https://luarocks.org/modules/luarocks/lustache) for rendering inside your AO process,
-or any other luarock you'll want to use.
+[Luarocks](https://luarocks.org/#quick-start) is only needed if you want to use additional Lua dependencies
+beyond the built-in [lustache](https://github.com/Olivine-Labs/lustache) template engine, which is bundled automatically.
 
 ## Install
 
@@ -110,10 +109,9 @@ npx hyperstache create my-app --directory ~/projects
 
 All scaffolded projects include Vite template processing and CSS out of the box.
 
-Then install luarocks dependencies and build:
+Build:
 
 ```bash
-npm run luarocks-install
 npx hyperstache build
 ```
 
@@ -129,11 +127,6 @@ export default defineConfig({
   processes: {
     main: { entry: 'src/process.lua' },
   },
-  luarocks: {
-    dependencies: {
-      lustache: '1.3.1-0'
-    }
-  }
 })
 ```
 
@@ -222,9 +215,6 @@ export default defineConfig({
     main: { entry: 'src/process.lua' },
     worker: { entry: 'src/worker.lua', outFile: 'worker.lua' },
   },
-  luarocks: {
-    dependencies: { lustache: '1.3.1-0' },
-  },
 })
 ```
 
@@ -241,9 +231,6 @@ export default defineConfig({
     reader: { entry: 'src/reader.lua', type: 'module' },
   },
   aos: { commit: 'abc1234' },
-  luarocks: {
-    dependencies: { lustache: '1.3.1-0' },
-  },
 })
 ```
 
@@ -258,7 +245,7 @@ The default type is `'process'`, so existing configs are unaffected.
 
 ### Per-Process Overrides
 
-Each process inherits top-level `templates` and `luarocks` settings, but can override them:
+Each process inherits top-level `templates` settings, but can override them:
 
 ```ts
 export default defineConfig({
@@ -272,9 +259,6 @@ export default defineConfig({
     },
   },
   templates: { vite: true },
-  luarocks: {
-    dependencies: { lustache: '1.3.1-0' },
-  },
 })
 ```
 
@@ -304,9 +288,6 @@ export default defineConfig({
   },
   templates: {
     vite: true,
-  },
-  luarocks: {
-    dependencies: { lustache: '1.3.1-0' },
   },
 })
 ```
@@ -387,9 +368,6 @@ export default defineConfig({
       external: ['./styles.css', /^@vendor\//],
     },
   },
-  luarocks: {
-    dependencies: { lustache: '1.3.1-0' },
-  },
 })
 ```
 
@@ -414,9 +392,6 @@ export default defineConfig({
         './styles.css',  // plain externals still work as before
       ],
     },
-  },
-  luarocks: {
-    dependencies: { lustache: '1.3.1-0' },
   },
 })
 ```
@@ -465,9 +440,6 @@ export default defineConfig({
   },
   templates: {
     vite: { esm: true },
-  },
-  luarocks: {
-    dependencies: { lustache: '1.3.1-0' },
   },
 })
 ```
@@ -599,9 +571,6 @@ export default defineConfig({
     main: { entry: 'src/process.lua' },
   },
   handlers: true,
-  luarocks: {
-    dependencies: { lustache: '1.3.1-0' },
-  },
 })
 ```
 
@@ -774,9 +743,6 @@ export default defineConfig({
   },
   handlers: true,
   adminInterface: true,
-  luarocks: {
-    dependencies: { lustache: '1.3.1-0' },
-  },
 })
 ```
 
@@ -817,9 +783,6 @@ export default defineConfig({
     main: { entry: 'src/process.lua' },
   },
   adminInterface: { path: 'manage' },
-  luarocks: {
-    dependencies: { lustache: '1.3.1-0' },
-  },
 })
 ```
 
@@ -838,9 +801,6 @@ export default defineConfig({
   },
   patchKey: 'dashboard',
   adminInterface: true,
-  luarocks: {
-    dependencies: { lustache: '1.3.1-0' },
-  },
 })
 ```
 
@@ -860,9 +820,6 @@ export default defineConfig({
     main: { entry: 'src/process.lua' },
   },
   adminInterface: { dir: 'src/my-admin' },
-  luarocks: {
-    dependencies: { lustache: '1.3.1-0' },
-  },
 })
 ```
 
@@ -890,9 +847,6 @@ export default defineConfig({
   },
   aos: {
     commit: 'ab1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9',
-  },
-  luarocks: {
-    dependencies: { lustache: '1.3.1-0' },
   },
 })
 ```
@@ -945,9 +899,6 @@ export default defineConfig({
   aos: {
     commit: 'ab1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9',
     exclude: ['.crypto.init', '.sqlite'],
-  },
-  luarocks: {
-    dependencies: { lustache: '1.3.1-0' },
   },
 })
 ```
@@ -1024,9 +975,6 @@ export default defineConfig({
     // authority: '_GQ33BkPtZrqxA84vM8Zk-N2aO0toNNu_C-l-rawrBA',
     // spawnTags: [{ name: 'App-Name', value: 'my-app' }],
     // actionTags: [{ name: 'X-Custom', value: 'value' }],
-  },
-  luarocks: {
-    dependencies: { lustache: '1.3.1-0' },
   },
 })
 ```
@@ -1284,9 +1232,9 @@ export default defineConfig({
     vite: true,                     // or { plugins, css, resolve, define, external, esm }
   },
 
-  // Shared luarocks defaults
+  // Shared luarocks defaults (optional — only needed for additional Lua dependencies)
   luarocks: {
-    dependencies: { lustache: '1.3.1-0' },
+    dependencies: { 'lua-cjson': '2.1.0-1' },
     luaVersion: '5.3',
   },
 
@@ -1419,7 +1367,7 @@ interface HyperstacheConfig {
 1. **Resolve** — Parses `require()` calls from the entry Lua file, recursively resolves modules from the project source tree and `lua_modules/` (luarocks local install)
 2. **Collect** — Globs template files, reads them, wraps each in Lua long-string brackets. If the admin interface is enabled, collects admin HTML files from `src/admin/` (prefixed with `admin/`) and merges them with user templates.
 3. **Render** *(optional)* — If `templates.vite` is enabled, processes `.html` templates through Vite: escapes Mustache syntax, runs Vite build to compile and inline CSS/JS assets, restores Mustache syntax. Admin templates are processed alongside user templates in a single Vite build.
-4. **Emit** — Wraps each module in a function, generates a `require`-compatible loader, inlines templates as a virtual `require('templates')` module, optionally includes the `require('hyperstache')` runtime module, and appends the entry point source
+4. **Emit** — Wraps each module in a function, generates a `require`-compatible loader, bundles the [lustache](https://github.com/Olivine-Labs/lustache) template engine, inlines templates as a virtual `require('templates')` module, optionally includes the `require('hyperstache')` runtime module, and appends the entry point source
 5. **Output** — Writes a single flat `.lua` file to `outDir/outFile`
 6. **AOS Module** *(optional)* — If `aos` is configured, wraps the bundle as a Lua module, clones the aos repo at the specified commit, copies its `process/` Lua files to the output directory, injects `require("{processName}")` into the aos `process.lua`, and generates a `config.yml` with ao-dev-cli build options
 
@@ -1427,17 +1375,11 @@ The output is self-contained and runs in AO's Lua runtime without external depen
 
 ## Rockspec Generation
 
-The `hyperstache rockspec` command generates a `.rockspec` file from the `luarocks` section of your config. This is useful for installing dependencies locally with `luarocks install`:
+The `hyperstache rockspec` command generates a `.rockspec` file from the `luarocks` section of your config. This is useful when you have additional Lua dependencies beyond the built-in lustache engine:
 
 ```bash
 npx hyperstache rockspec
 luarocks install --local --tree lua_modules my-app-0.1.0-1.rockspec
-```
-
-Scaffolded projects include a convenience npm script that combines both steps:
-
-```bash
-npm run luarocks-install
 ```
 
 The bundler then resolves from `lua_modules/` to inline those dependencies into the final bundle.

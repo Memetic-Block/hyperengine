@@ -1,4 +1,5 @@
 import type { LuaModule } from './resolver.js'
+import type { LustacheModule } from './runtime.js'
 
 export interface EmitOptions {
   /** Resolved Lua modules (entry module last) */
@@ -23,6 +24,7 @@ export function emitBundle(
   runtimeLuaSource?: string | null,
   autoRequireRuntime?: boolean,
   autoRequireModules?: string[],
+  lustacheModules?: LustacheModule[],
 ): string {
   const lines: string[] = []
 
@@ -42,6 +44,18 @@ export function emitBundle(
   lines.push('end')
   lines.push('require = _require')
   lines.push('')
+
+  // Lustache modules (registered before templates and runtime so require("lustache") resolves)
+  if (lustacheModules) {
+    for (const mod of lustacheModules) {
+      lines.push(`_modules["${mod.name}"] = function()`)
+      for (const line of mod.source.split('\n')) {
+        lines.push(`  ${line}`)
+      }
+      lines.push('end')
+      lines.push('')
+    }
+  }
 
   // Templates module (if any)
   if (templatesLuaSource) {
@@ -105,8 +119,9 @@ export function emitModule(
   runtimeLuaSource?: string | null,
   autoRequireRuntime?: boolean,
   autoRequireModules?: string[],
+  lustacheModules?: LustacheModule[],
 ): string {
-  const inner = emitBundle(modules, templatesLuaSource, runtimeLuaSource, autoRequireRuntime, autoRequireModules)
+  const inner = emitBundle(modules, templatesLuaSource, runtimeLuaSource, autoRequireRuntime, autoRequireModules, lustacheModules)
   const lines: string[] = []
   lines.push('local function _init()')
   for (const line of inner.split('\n')) {

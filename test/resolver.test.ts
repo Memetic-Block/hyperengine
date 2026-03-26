@@ -80,9 +80,10 @@ describe('resolveModules', () => {
 
     const result = await resolveModules(config)
 
-    // The sample-app process requires 'templates' and 'lustache'
-    // — 'templates' and 'hyperstache' should both be skipped
+    // The sample-app process requires 'templates', 'lustache', and 'hyperstache'
+    // — all are auto-generated/bundled modules and should be skipped
     expect(result.unresolved).not.toContain('templates')
     expect(result.unresolved).not.toContain('hyperstache')
+    expect(result.unresolved).not.toContain('lustache')
   })
 })

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { generateRuntimeSource } from '../src/bundler/runtime.js'
+import { generateRuntimeSource, generateLustacheModules } from '../src/bundler/runtime.js'
 
 const defaults = { handlers: false, patchKey: 'ui', stateKey: 'hyperstache_state' }
 
@@ -683,5 +683,34 @@ describe('generateRuntimeSource', () => {
     // Should call listPublished and return JSON
     expect(handlerBody).toContain('hyperstache.listPublished()')
     expect(handlerBody).toContain('json.encode(published)')
+  })
+})
+
+describe('generateLustacheModules', () => {
+  it('returns all four lustache modules in dependency order', async () => {
+    const modules = await generateLustacheModules()
+
+    expect(modules).toHaveLength(4)
+    expect(modules.map(m => m.name)).toEqual([
+      'lustache.scanner',
+      'lustache.context',
+      'lustache.renderer',
+      'lustache',
+    ])
+  })
+
+  it('returns non-empty source for each module', async () => {
+    const modules = await generateLustacheModules()
+
+    for (const mod of modules) {
+      expect(mod.source.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('main lustache module requires lustache.renderer', async () => {
+    const modules = await generateLustacheModules()
+    const main = modules.find(m => m.name === 'lustache')!
+
+    expect(main.source).toContain('require("lustache.renderer")')
   })
 })

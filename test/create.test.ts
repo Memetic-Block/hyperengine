@@ -57,12 +57,10 @@ describe('createProject', () => {
       expect(pkg.scripts.dev).toBe('hyperstache dev')
     })
 
-    it('includes luarocks-install script', async () => {
+    it('does not include luarocks-install script', async () => {
       await createProject('my-app', {}, tmp)
       const pkg = JSON.parse(await readFile(join(tmp, 'my-app/package.json'), 'utf-8'))
-      expect(pkg.scripts['luarocks-install']).toBe(
-        'hyperstache rockspec && luarocks make --only-deps --tree lua_modules *.rockspec',
-      )
+      expect(pkg.scripts['luarocks-install']).toBeUndefined()
     })
 
     it('config enables templates.vite', async () => {
@@ -267,10 +265,11 @@ describe('createProject', () => {
         expect(pkg.private).toBe(true)
       })
 
-      it(`${label}: config includes lustache dependency`, async () => {
+      it(`${label}: config does not include luarocks block`, async () => {
         await createProject('test-proj', flags, tmp)
         const config = await readFile(join(tmp, 'test-proj/hyperstache.config.ts'), 'utf-8')
-        expect(config).toContain('lustache')
+        expect(config).not.toContain('lustache')
+        expect(config).not.toContain('luarocks')
       })
 
       it(`${label}: .gitignore includes node_modules and dist`, async () => {
@@ -294,7 +293,7 @@ describe('createProject', () => {
       }
       expect(logs.some(l => l.includes('cd my-app'))).toBe(true)
       expect(logs.some(l => l.includes('Created my-app/'))).toBe(true)
-      expect(logs.some(l => l.includes('npm run luarocks-install'))).toBe(true)
+      expect(logs.some(l => l.includes('npm run luarocks-install'))).toBe(false)
       expect(logs.some(l => l.includes('npx hyperstache build'))).toBe(true)
       expect(logs.some(l => l.includes('npx hyperstache dev'))).toBe(false)
     })

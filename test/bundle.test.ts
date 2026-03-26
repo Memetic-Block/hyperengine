@@ -48,9 +48,14 @@ describe('bundle integration', () => {
     // Entry source should be at the end
     expect(result.output).toContain("local utils = require('lib.utils')")
 
-    // lustache and templates should be unresolved (external)
-    // lustache is unresolved because it's not in the project
-    expect(result.unresolved).toContain('lustache')
+    // lustache is bundled directly (no longer unresolved)
+    expect(result.unresolved).not.toContain('lustache')
+
+    // Lustache modules should be embedded in the bundle
+    expect(result.output).toContain('_modules["lustache"]')
+    expect(result.output).toContain('_modules["lustache.renderer"]')
+    expect(result.output).toContain('_modules["lustache.scanner"]')
+    expect(result.output).toContain('_modules["lustache.context"]')
 
     // Process name should be set
     expect(result.processName).toBe('main')

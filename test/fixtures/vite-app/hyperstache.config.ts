@@ -7,9 +7,4 @@ export default defineConfig({
   templates: {
     vite: true,
   },
-  luarocks: {
-    dependencies: {
-      lustache: '1.3.1-0',
-    },
-  },
 })

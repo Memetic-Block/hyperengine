@@ -71,3 +71,31 @@ export async function generateRuntimeSource(options: RuntimeOptions): Promise<st
 
   return source
 }
+
+export interface LustacheModule {
+  name: string
+  source: string
+}
+
+/**
+ * Read the bundled lustache Lua source files and return them as
+ * module entries in dependency order (leaf deps first).
+ *
+ * These are registered as `_modules["lustache.*"]` in the emitted
+ * bundle so that `require("lustache")` resolves without luarocks.
+ */
+export async function generateLustacheModules(): Promise<LustacheModule[]> {
+  const [scanner, context, renderer, main] = await Promise.all([
+    readFile(luaPath('lustache/scanner.lua'), 'utf-8'),
+    readFile(luaPath('lustache/context.lua'), 'utf-8'),
+    readFile(luaPath('lustache/renderer.lua'), 'utf-8'),
+    readFile(luaPath('lustache.lua'), 'utf-8'),
+  ])
+
+  return [
+    { name: 'lustache.scanner', source: scanner },
+    { name: 'lustache.context', source: context },
+    { name: 'lustache.renderer', source: renderer },
+    { name: 'lustache', source: main },
+  ]
+}

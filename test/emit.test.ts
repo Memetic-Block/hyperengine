@@ -142,6 +142,41 @@ describe('emitBundle', () => {
     const afterEntry = output.slice(entryIdx)
     expect(afterEntry).toContain('require("admin")')
   })
+
+  it('registers lustache modules before templates and runtime', () => {
+    const modules: LuaModule[] = [
+      {
+        name: 'main',
+        path: '/fake/main.lua',
+        source: 'print("hello")',
+        dependencies: [],
+      },
+    ]
+
+    const templatesLua = `local _templates = {}\nreturn _templates`
+    const runtimeLua = `local hyperstache = {}\nreturn hyperstache`
+    const lustacheModules = [
+      { name: 'lustache.scanner', source: 'local scanner = {}\nreturn scanner' },
+      { name: 'lustache.context', source: 'local context = {}\nreturn context' },
+      { name: 'lustache.renderer', source: 'local renderer = {}\nreturn renderer' },
+      { name: 'lustache', source: 'local lustache = {}\nreturn lustache' },
+    ]
+
+    const output = emitBundle(modules, templatesLua, runtimeLua, false, undefined, lustacheModules)
+
+    // All lustache modules should be registered
+    expect(output).toContain('_modules["lustache.scanner"]')
+    expect(output).toContain('_modules["lustache.context"]')
+    expect(output).toContain('_modules["lustache.renderer"]')
+    expect(output).toContain('_modules["lustache"]')
+
+    // Lustache modules should appear before templates and runtime
+    const lustacheIdx = output.indexOf('_modules["lustache.scanner"]')
+    const templatesIdx = output.indexOf('_modules["templates"]')
+    const runtimeIdx = output.indexOf('_modules["hyperstache"]')
+    expect(lustacheIdx).toBeLessThan(templatesIdx)
+    expect(lustacheIdx).toBeLessThan(runtimeIdx)
+  })
 })
 
 describe('emitModule', () => {

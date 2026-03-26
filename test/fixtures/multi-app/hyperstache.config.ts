@@ -6,9 +6,4 @@ export default defineConfig({
     worker: { entry: 'src/worker.lua', outFile: 'worker.lua' },
     reader: { entry: 'src/reader.lua', type: 'module' },
   },
-  luarocks: {
-    dependencies: {
-      lustache: '1.3.1-0',
-    },
-  },
 })

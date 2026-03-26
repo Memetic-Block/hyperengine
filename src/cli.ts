@@ -18,7 +18,7 @@ const program = new Command()
 
 program
   .name('hyperstache')
-  .description('AO Lua process bundler with Mustache templates and Luarocks')
+  .description('AO Lua process bundler with Mustache templates and optional Luarocks support')
   .version(pkg.version)
 
 program
