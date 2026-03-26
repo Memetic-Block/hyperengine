@@ -10,13 +10,22 @@ const ao = connect({
   SCHEDULER: window.AO_ENV.Process.Tags.Scheduler
 })
 
-const STATE_CACHE_TTL = 5_000;
-let _stateCache = null;
-let _stateCacheTime = 0;
-let _stateFlight = null;
-function invalidateStateCache() { _stateCache = null; _stateCacheTime = 0; }
+const PERMISSIONS = ['ACCESS_ADDRESS', 'ACCESS_PUBLIC_KEY', 'SIGN_TRANSACTION']
 
-async function send(action, tags, data) {
+window.sendActionMessage = async (action, tags, data) => {
+  if (!window.arweaveWallet) {
+    throw new Error('Arweave wallet not found');
+  }
+  try {
+    await window.arweaveWallet.getActiveAddress();
+  } catch (getActiveWalletErr) {
+    try {
+      await window.arweaveWallet.connect(PERMISSIONS)
+    } catch (connectWalletErr) {
+      throw new Error('Failed to connect to Arweave wallet: ' + connectWalletErr.message);
+    }
+  }
+
   const t = [{ name: 'Action', value: action }];
   if (tags) Object.entries(tags).forEach(([k, v]) => t.push({ name: k, value: v }));
   console.log('send message', { action, tags, data });
@@ -27,38 +36,19 @@ async function send(action, tags, data) {
     signer: createSigner(window.arweaveWallet)
   });
   const res = await ao.result({ process: PROCESS_ID, message: mid });
-  console.log('send result', res);
-  invalidateStateCache();
-  const out = res.Messages && res.Messages[0];
-  if (out && out.Tags) {
-    const errTag = out.Tags.find(t => t.name === 'Error');
-    if (errTag) throw new Error(out.Data || errTag.value);
+  console.log('send message result', res);
+  if (res.Error) {
+    throw new Error(res.Error);
   }
-  return out ? out.Data : '';
 }
 
-async function fetchState({ force = false } = {}) {
-  if (!force && _stateCache && (Date.now() - _stateCacheTime < STATE_CACHE_TTL)) {
-    console.log('using cached state')
-    return _stateCache;
-  }
-  if (_stateFlight) return _stateFlight;
-  _stateFlight = fetch(`${HB_URL}/${PROCESS_ID}/now/hyperstache_state/serialize~json@1.0`)
-    .then(res => {
-      if (!res.ok) throw new Error('Failed to fetch state: ' + res.statusText);
-      return res.json();
-    })
-    .then(state => {
-      _stateCache = state;
-      _stateCacheTime = Date.now();
-      console.log('got state', state)
-      return state;
-    })
-    .finally(() => { _stateFlight = null; });
-  return _stateFlight;
+window.showMessageResult = (el, msg, ok) => {
+  el.className = 'status ' + (ok ? 'ok' : 'err');
+  el.textContent = msg;
+  el.classList.remove('hidden');
 }
 
-async function fetchTemplate(template_key) {
+window.fetchTemplate = async (template_key) => {
   const res = await fetch(`${HB_URL}/${PROCESS_ID}/now/hyperstache_templates/${template_key}`)
   if (!res.ok) throw new Error('Failed to fetch template: ' + res.statusText);
   const template = await res.text();
@@ -66,314 +56,202 @@ async function fetchTemplate(template_key) {
   return template
 }
 
-function showStatus(el, msg, ok) {
-  el.className = 'status ' + (ok ? 'ok' : 'err');
-  el.textContent = msg;
-  el.classList.remove('hidden');
-}
-
-async function loadTemplates() {
-  listEl.innerHTML = '<div class="list-empty">Loading...</div>';
-  try {
-    const state = await fetchState();
-    const keys = state.template_keys ? state.template_keys.split(',').filter(Boolean) : [];
-    if (!keys.length) { listEl.innerHTML = '<div class="list-empty">No templates</div>'; return; }
-    listEl.innerHTML = keys.map(k =>
-      '<div class="list-item"><span data-key="' + k + '">' + k + '</span>' +
-      '<div class="actions"><button class="secondary" data-edit="' + k + '">Edit</button>' +
-      '<button class="danger" data-del="' + k + '">Delete</button></div></div>'
-    ).join('');
-  } catch (e) { listEl.innerHTML = '<div class="list-empty">Error: ' + e.message + '</div>'; }
-}
-
-async function loadACL() {
-  aclList.innerHTML = '<div class="list-empty">Loading...</div>';
-  try {
-    const state = await fetchState();
-    const acl = {}
-    for (const k in state) {
-      if (k.startsWith('acl_')) {
-        const addr = k.slice(4);
-        const roles = state[k].split(',').filter(Boolean);
-        if (roles.length) acl[addr] = roles;
-      }
-    }
-    const addresses = Object.keys(acl);
-    if (!addresses.length) { aclList.innerHTML = '<div class="list-empty">No roles assigned</div>'; return; }
-    aclList.innerHTML = addresses.map(addr => {
-      const roles = acl[addr].join(', ');
-      return '<div class="list-item"><span>' + addr + ' &rarr; ' + roles + '</span>' +
-        '<div class="actions"><button class="danger" data-revoke-addr="' + addr + '" data-revoke-roles="' + roles + '">Revoke</button></div></div>';
-    }).join('');
-  } catch (e) { aclList.innerHTML = '<div class="list-empty">Error: ' + e.message + '</div>'; }
-}
-
-async function loadPreviewKeys() {
-  try {
-    const raw = await fetchState('Hyperstache-List');
-    const keys = raw ? raw.split('\n').filter(Boolean) : [];
-    previewKey.innerHTML = '<option value="">Select...</option>' + keys.map(k => '<option value="' + k + '">' + k + '</option>').join('');
-  } catch {}
-}
-
-if (window.location.hash) {
-  setActiveTab(window.location.hash.slice(1));
-} else {
-  setActiveTab('templates');
-}
-
-function setActiveTab(tabName) {
-  const tab = document.querySelector(`.tab[data-tab="${tabName}"]`);
-  if (tab) {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-    tab.classList.add('active');
-    document.getElementById(tab.dataset.tab).classList.add('active');
-  }
-}
-
-// --- Tabs ---
-document.querySelectorAll('.tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    window.location.hash = '#' + tab.dataset.tab;
-    setActiveTab(tab.dataset.tab);
-  });
-});
-
-// --- Templates ---
-const listEl = document.getElementById('template-list');
-const editorEl = document.getElementById('template-editor');
-const keyInput = document.getElementById('tpl-key');
-const contentInput = document.getElementById('tpl-content');
-const editorStatus = document.getElementById('editor-status');
-
-listEl.addEventListener('click', async (e) => {
-  const templateName = e.target.dataset.edit || e.target.closest('[data-key]')?.dataset.key;
-  const del = e.target.dataset.del;
-  if (del) {
-    if (!confirm('Delete ' + del + '?')) return;
-    const delBtn = e.target;
-    try {
-      delBtn.disabled = 'disabled';
-      delBtn.textContent = 'Deleting...';
-      await send('Hyperstache-Remove', { Key: del });
-      loadTemplates(); loadPreviewKeys();
-    } catch (err) {
-      alert(err.message);
-    } finally {
-      delBtn.disabled = false;
-      delBtn.textContent = 'Delete';
-    }
-  } else if (templateName) {
-    keyInput.value = templateName;
-    try {
-      contentInput.value = await fetchTemplate(templateName);
-    } catch (err) { console.error(err); contentInput.value = err.message; }
-    editorEl.classList.remove('hidden'); editorStatus.className = 'hidden';
-  }
-});
-document.getElementById('btn-new').addEventListener('click', () => {
-  keyInput.value = ''; contentInput.value = ''; editorEl.classList.remove('hidden');
-  editorStatus.className = 'hidden'; keyInput.focus();
-});
-const cancelButton = document.getElementById('btn-cancel')
-cancelButton.addEventListener('click', () => editorEl.classList.add('hidden'));
-document.getElementById('btn-save').addEventListener('click', async ({ target: saveButton }) => {
-  const k = keyInput.value.trim();
-  if (!k) { showStatus(editorStatus, 'Key is required', false); return; }
-  try {
-    saveButton.disabled = 'disabled';
-    cancelButton.disabled = 'disabled';
-    saveButton.textContent = 'Saving...';
-    await send('Hyperstache-Set', { Key: k }, contentInput.value);
-    showStatus(editorStatus, 'Saved', true);
-
-    // await loadTemplates();
-    // await loadPreviewKeys();
-  } catch (err) {
-    showStatus(editorStatus, err.message, false);
-  } finally {
-    // window.location.reload();
-    // saveButton.disabled = false;
-    // cancelButton.disabled = false;
-    // saveButton.textContent = 'Save';
-  }
-});
-
-// document.getElementById('btn-refresh').addEventListener('click', () => { invalidateStateCache(); loadTemplates(); });
-
-// --- ACL ---
-const aclList = document.getElementById('acl-list');
-const grantForm = document.getElementById('grant-form');
-const grantStatus = document.getElementById('grant-status');
-
-aclList.addEventListener('click', async (e) => {
-  const btn = e.target.closest('[data-revoke-addr]');
-  if (!btn) return;
-  const addr = btn.dataset.revokeAddr;
-  const roles = btn.dataset.revokeRoles.split(',');
-  const role = roles.length === 1 ? roles[0] : prompt('Which role to revoke? (' + roles.join(', ') + ')');
-  if (!role) return;
-  try {
-    btn.disabled = 'disabled';
-    btn.textContent = 'Revoking...';
-    await send('Hyperstache-Revoke-Role', { Address: addr, Role: role.trim() });
-    loadACL();
-  } catch (err) {
-    alert(err.message);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Revoke';
-  }
-});
+const actionButtons = document.getElementsByClassName('action-button');
 const grantSubmitButton = document.getElementById('btn-grant-submit');
-const grantCancelButton = document.getElementById('btn-grant-cancel');
-document.getElementById('btn-grant').addEventListener('click', () => { grantForm.classList.remove('hidden'); grantStatus.className = 'hidden'; });
-grantCancelButton.addEventListener('click', () => grantForm.classList.add('hidden'));
-grantSubmitButton.addEventListener('click', async () => {
-  const addr = document.getElementById('grant-address').value.trim();
-  const role = document.getElementById('grant-role').value.trim();
-  if (!addr || !role) { showStatus(grantStatus, 'Address and role required', false); return; }
+const grantStatus = document.getElementById('grant-status');
+const grantAddress = document.getElementById('grant-address');
+const grantRole = document.getElementById('grant-role');
+
+window.onGrantRoleClicked = async () => {
+  const addr = grantAddress.value.trim();
+  const role = grantRole.value.trim();
+  if (!addr || !role) { window.showMessageResult(grantStatus, 'Address and role required', false); return; }
   try {
-    grantSubmitButton.disabled = 'disabled';
-    grantCancelButton.disabled = 'disabled';
     grantSubmitButton.textContent = 'Granting...';
-    await send('Hyperstache-Grant-Role', { Address: addr, Role: role });
-    showStatus(grantStatus, 'Granted', true);
-    // loadACL();
+    for (const btn of actionButtons) {
+      btn.disabled = 'disabled';
+    }
+    await window.sendActionMessage('Hyperstache-Grant-Role', { Address: addr, Role: role });
+    window.showMessageResult(grantStatus, 'Granted', true);
+    window.location.reload();
   } catch (err) {
-    showStatus(grantStatus, err.message, false);
-  } finally {
-    grantSubmitButton.disabled = false;
-    grantCancelButton.disabled = false;
+    console.error(err);
+    window.showMessageResult(grantStatus, err.message, false);
     grantSubmitButton.textContent = 'Grant';
+    for (const btn of actionButtons) {
+      btn.disabled = false;
+    }
   }
-});
-// document.getElementById('btn-acl-refresh').addEventListener('click', () => { invalidateStateCache(); loadACL(); });
+}
 
-// --- Render Preview ---
-const previewKey = document.getElementById('preview-key');
-const previewData = document.getElementById('preview-data');
-const previewOutput = document.getElementById('preview-output');
+window.onCancelGrantClicked = () => {
+  grantAddress.value = '';
+  grantRole.value = '';
+}
 
-const renderButton = document.getElementById('btn-render');
-renderButton.addEventListener('click', async () => {
-  const key = previewKey.value;
-  if (!key) return;
-  let data;
-  try { data = JSON.parse(previewData.value); } catch { previewOutput.textContent = 'Invalid JSON'; return; }
+window.onRevokeRoleClicked = (evt) => async (addr, role) => {
+  if (!addr || !role) return;
   try {
-    renderButton.disabled = 'disabled';
-    renderButton.textContent = 'Rendering...';
-    const html = await fetchState('Hyperstache-Render', { Key: key }, JSON.stringify(data));
-    previewOutput.innerHTML = html;
+    evt.target.textContent = 'Revoking...';
+    for (const btn of actionButtons) {
+      btn.disabled = 'disabled';
+    }
+    await window.sendActionMessage('Hyperstache-Revoke-Role', { Address: addr, Role: role.trim() });
+    window.showMessageResult(grantStatus, 'Revoked', true);
+    window.location.reload();
   } catch (err) {
-    previewOutput.textContent = 'Error: ' + err.message;
-  } finally {
-    renderButton.disabled = false;
-    renderButton.textContent = 'Render';
+    console.error(err);
+    window.showMessageResult(grantStatus, err.message, false);
+    grantSubmitButton.textContent = 'Revoke';
+    for (const btn of actionButtons) {
+      btn.disabled = false;
+    }
   }
-});
+}
 
-// --- Publish ---
-const publishedList = document.getElementById('published-list');
-const publishForm = document.getElementById('publish-form');
+const editorStatus = document.getElementById('editor-status');
+const templateKeyInput = document.getElementById('tpl-key');
+const templateContentInput = document.getElementById('tpl-content');
+const saveTemplateButton = document.getElementById('tpl-save');
+
+window.onEditTemplateClicked = (evt) => async (templateKey) => {
+  if (!templateKey) return;
+  templateKeyInput.value = templateKey;
+  const editButton = document.getElementById('btn-edit-tpl-' + templateKey);
+  try {
+    editButton.textContent = 'Loading...';
+    for (const btn of actionButtons) {
+      btn.disabled = 'disabled';
+    }
+    templateContentInput.value = await window.fetchTemplate(templateKey);
+  } catch (err) {
+    console.error(err);
+    window.showMessageResult(editorStatus, err.message, false);
+  } finally {
+    editButton.textContent = 'Edit';
+    for (const btn of actionButtons) {
+      btn.disabled = false;
+    }
+  }
+}
+
+window.onCancelTemplateClicked = () => {
+  templateKeyInput.value = '';
+  templateContentInput.value = '';
+}
+
+window.onDeleteTemplateClicked = (evt) => async (templateKey) => {
+  if (!templateKey) return;
+  if (!confirm('Delete ' + templateKey + '?')) return;
+  try {
+    evt.target.textContent = 'Deleting...';
+    for (const btn of actionButtons) {
+      btn.disabled = 'disabled';
+    }
+    await window.sendActionMessage('Hyperstache-Remove', { ['Template-Key']: templateKey });
+    window.location.reload();
+  } catch (err) {
+    console.error(err);
+    window.showMessageResult(editorStatus, err.message, false);
+    evt.target.textContent = 'Delete';
+    for (const btn of actionButtons) {
+      btn.disabled = false;
+    }
+  }
+}
+
+window.onSaveTemplateClicked = async () => {
+  const key = templateKeyInput.value.trim();
+  const content = templateContentInput.value;
+  if (!key) { window.showMessageResult(editorStatus, 'Key is required', false); return; }
+  try {
+    saveTemplateButton.textContent = 'Saving...';
+    for (const btn of actionButtons) {
+      btn.disabled = 'disabled';
+    }
+    await window.sendActionMessage('Hyperstache-Set', { ['Template-Key']: key }, content);
+    window.showMessageResult(editorStatus, 'Saved', true);
+    window.location.reload();
+  } catch (err) {
+    console.error(err);
+    window.showMessageResult(editorStatus, err.message, false);
+    saveTemplateButton.textContent = 'Save';
+    for (const btn of actionButtons) {
+      btn.disabled = false;
+    }
+  }
+}
+
+window.onTemplateFileSelected = (evt) => {
+  const file = evt.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    templateKeyInput.value = file.name;
+    templateContentInput.value = e.target.result;
+    window.showMessageResult(editorStatus, 'File loaded', true);
+  }
+  reader.onerror = (e) => {
+    console.error('File read error', e);
+    window.showMessageResult(editorStatus, 'Failed to read file', false);
+  }
+  reader.readAsText(file);
+}
+
+const publishKey = document.getElementById('publish-key');
+const publishPath = document.getElementById('publish-path');
+const publishButton = document.getElementById('btn-publish-submit');
+const publishStatePath = document.getElementById('publish-state-path');
 const publishStatus = document.getElementById('publish-status');
-const publishKeySelect = document.getElementById('publish-key');
 
-async function fetchPublished() {
-  const res = await fetch(`${HB_URL}/${PROCESS_ID}/now/hyperstache_published/serialize~json@1.0`);
-  if (!res.ok) throw new Error('Failed to fetch published: ' + res.statusText);
-  return res.json();
-}
-
-async function loadPublished() {
-  publishedList.innerHTML = '<div class="list-empty">Loading...</div>';
-  try {
-    const published = await fetchPublished();
-    const paths = Object.keys(published)
-      .filter(k => !['commitments', 'device'].includes(k))
-      .map(k => k.endsWith('+link') ? k.slice(0, -5) : k);
-    if (!paths.length) { publishedList.innerHTML = '<div class="list-empty">No published templates</div>'; return; }
-    publishedList.innerHTML = paths.map(p => {
-      const reg = published[p];
-      const detail = reg?.statePath
-        ? ' <span class="pub-detail">state: ' + reg.statePath + '</span>'
-        : '';
-      return '<div class="list-item"><span>' + p + ' &rarr; ' + (reg?.key || '?') + detail + '</span>' +
-        '<div class="actions"><button class="danger" data-unpublish="' + p + '">Unpublish</button></div></div>';
-    }).join('');
-  } catch (e) {
-    console.error(e);
-    publishedList.innerHTML = '<div class="list-empty">Error: ' + e.message + '</div>';
-  }
-}
-
-async function loadPublishKeys() {
-  try {
-    const state = await fetchState();
-    const keys = state.template_keys ? state.template_keys.split(',').filter(Boolean) : [];
-    publishKeySelect.innerHTML = '<option value="">Select...</option>' + keys.map(k => '<option value="' + k + '">' + k + '</option>').join('');
-  } catch {}
-}
-
-publishedList.addEventListener('click', async (e) => {
-  const btn = e.target.closest('[data-unpublish]');
-  if (!btn) return;
-  const path = btn.dataset.unpublish;
-  if (!confirm('Unpublish ' + path + '?')) return;
-  try {
-    btn.disabled = 'disabled';
-    btn.textContent = 'Unpublishing...';
-    await send('Hyperstache-Unpublish-Template', { Path: path });
-    loadPublished();
-  } catch (err) {
-    alert(err.message);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Unpublish';
-  }
-});
-
-document.getElementById('btn-publish-new').addEventListener('click', () => {
-  publishForm.classList.remove('hidden');
-  publishStatus.className = 'hidden';
-  loadPublishKeys();
-});
-const publishCancelButton = document.getElementById('btn-publish-cancel');
-publishCancelButton.addEventListener('click', () => publishForm.classList.add('hidden'));
-const publishSubmitButton = document.getElementById('btn-publish-submit');
-publishSubmitButton.addEventListener('click', async () => {
-  const key = publishKeySelect.value;
-  const path = document.getElementById('publish-path').value.trim();
-  if (!key || !path) { showStatus(publishStatus, 'Template and path are required', false); return; }
-  const statePath = document.getElementById('publish-state-path').value.trim();
-  const tags = { ['Template-Name']: key, ['Publish-Path']: path };
+window.onPublishTemplateClicked = async () => {
+  const template_key = publishKey.value;
+  const path = publishPath.value.trim();
+  if (!template_key || !path) { window.showMessageResult(publishStatus, 'Template and path are required', false); return; }
+  const statePath = publishStatePath.value.trim();
+  const tags = { ['Template-Key']: template_key, ['Publish-Path']: path };
   if (statePath) tags['State-Path'] = statePath;
   try {
-    publishSubmitButton.disabled = 'disabled';
-    publishCancelButton.disabled = 'disabled';
-    publishSubmitButton.textContent = 'Publishing...';
-    await send('Hyperstache-Publish-Template', tags);
-    showStatus(publishStatus, 'Published', true);
-    loadPublished();
+    publishButton.textContent = 'Publishing...';
+    for (const btn of actionButtons) {
+      btn.disabled = 'disabled';
+    }
+    await window.sendActionMessage('Hyperstache-Publish-Template', tags);
+    window.showMessageResult(publishStatus, 'Published', true);
+    window.location.reload();
   } catch (err) {
-    showStatus(publishStatus, err.message, false);
-  } finally {
-    publishSubmitButton.disabled = false;
-    publishCancelButton.disabled = false;
-    publishSubmitButton.textContent = 'Publish';
+    console.error(err);
+    window.showMessageResult(publishStatus, err.message, false);
+    publishButton.textContent = 'Publish';
+    for (const btn of actionButtons) {
+      btn.disabled = false;
+    }
   }
-});
-document.getElementById('btn-publish-refresh').addEventListener('click', () => { invalidateStateCache(); loadPublished(); });
+}
 
-// --- Init ---
-// loadTemplates();
+window.onUnpublishTemplateClicked = (evt) => async (path) => {
+  if (!path) return;
+  if (!confirm('Unpublish ' + path + '?')) return;
+  try {
+    evt.target.textContent = 'Unpublishing...';
+    for (const btn of actionButtons) {
+      btn.disabled = 'disabled';
+    }
+    await window.sendActionMessage('Hyperstache-Unpublish-Template', { ['Publish-Path']: path });
+    window.showMessageResult(publishStatus, 'Unpublished', true);
+    window.location.reload();
+  } catch (err) {
+    console.error(err);
+    window.showMessageResult(publishStatus, err.message, false);
+    evt.target.textContent = 'Unpublish';
+    for (const btn of actionButtons) {
+      btn.disabled = false;
+    }
+  }
+}
 
-// Lazy-load ACL, preview keys & published list when their tabs first activate
-// const obs = new MutationObserver(() => {
-//   if (document.getElementById('acl').classList.contains('active')) loadACL();
-//   if (document.getElementById('preview').classList.contains('active')) loadPreviewKeys();
-//   if (document.getElementById('publish').classList.contains('active')) loadPublished();
-// });
-// document.querySelectorAll('.panel').forEach(p => obs.observe(p, { attributes: true, attributeFilter: ['class'] }));
+window.onCancelPublishClicked = () => {
+  publishKey.value = '';
+  publishPath.value = '';
+  publishStatePath.value = '';
+}

@@ -737,14 +737,22 @@ Use the `--admin` flag when creating a new project:
 npx hyperstache create my-app --admin
 ```
 
-This creates four files under `src/admin/`:
+This creates the following files under `src/admin/`:
 
-| File              | Purpose                                                         |
-|-------------------|-----------------------------------------------------------------|
-| `index.html`      | Admin UI HTML — four panels: templates, ACL, render preview, publish |
-| `styles.css`      | Admin UI styles (dark theme, GitHub Primer-inspired)            |
-| `admin.js`        | Frontend logic — tab switching, template CRUD, ACL management, publish management |
-| `init.lua`        | Lua handler module — render, publish, and sync handlers         |
+| File / Directory          | Purpose                                                         |
+|---------------------------|-----------------------------------------------------------------|
+| `template.html`           | Admin UI layout — mustache template with header, nav, body, and footer partials |
+| `styles.css`              | Admin UI styles (dark theme, GitHub Primer-inspired)            |
+| `admin.js`                | Frontend logic — tab switching, template CRUD, ACL management, publish management |
+| `init.lua`                | Lua module — publishes admin routes via `hyperstache.publishTemplate` |
+| `pages/index.mu`          | Home page partial                                               |
+| `pages/templates.mu`      | Templates management page partial                               |
+| `pages/publish.mu`        | Publish management page partial                                 |
+| `pages/acl.mu`            | Access control page partial                                     |
+| `pages/preview.mu`        | Render preview page partial                                     |
+| `partials/header.mu`      | Header partial                                                  |
+| `partials/nav.mu`         | Navigation partial                                              |
+| `partials/footer.mu`      | Footer partial                                                  |
 
 All four files are fully editable. The HTML references the CSS and JS via standard `<link>` and `<script>` tags, and the Vite template pipeline inlines them at build time — just like your regular templates.
 
@@ -780,14 +788,14 @@ Enabling `adminInterface` automatically enables `handlers` — the admin UI comm
 At build time, hyperstache:
 
 1. **Resolves** `src/admin/init.lua` as a regular Lua module (name: `admin`)
-2. **Collects** HTML files from `src/admin/` as admin templates (prefixed with `admin/`, e.g. `admin/index.html`)
+2. **Collects** HTML and mustache files from `src/admin/` as admin templates (prefixed with `admin/`, e.g. `admin/template.html`, `admin/pages/index.mu`)
 3. **Merges** admin templates with your regular templates from `src/templates/`
 4. **Processes** all templates through Vite together — admin CSS and JS are inlined into the admin HTML
 5. **Emits** the admin module alongside your other modules, with an auto-`require("admin")` in the entry point
 
 The admin Lua module:
 
-- **Auto-initializes on load** — when the bundler auto-requires the admin module, `admin.handlers()` fires automatically, rendering the admin HTML and registering it via `hyperstache.patch()` (accumulate only, no Send). The user's `hyperstache.publish()` call in the entry point then sends the full state — including the admin page — in a single message.
+- **Auto-initializes on load** — when the bundler auto-requires the admin module, `admin.publish()` fires automatically, publishing each admin route via `hyperstache.publishTemplate()` with mustache partials for header, nav, body, and footer. The user's `hyperstache.publish()` call in the entry point then sends the full state — including the admin pages — in a single message.
 - **Publishes to `patch@1.0`** after every mutation (template Set/Remove, role Grant/Revoke) via `hyperstache.publish()`, which sends the full accumulated state
 - **Stores the rendered HTML** in the `hyperstache_admin` global (auto-persisted by AO)
 
@@ -1151,10 +1159,20 @@ my-ao-app/
     process.lua
     worker.lua
     admin/              ← optional, scaffolded with --admin
-      index.html
+      template.html
       styles.css
       admin.js
       init.lua
+      pages/
+        index.mu
+        templates.mu
+        publish.mu
+        acl.mu
+        preview.mu
+      partials/
+        header.mu
+        nav.mu
+        footer.mu
     handlers/
       home.lua
     templates/

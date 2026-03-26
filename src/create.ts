@@ -253,10 +253,18 @@ async function buildFiles(name: string, flags: CreateFlags): Promise<FileEntry[]
   if (flags.admin) {
     const scaffoldDir = resolve(__dirname, 'scaffolds', 'admin')
     files.push(
-      { path: 'src/admin/index.html', content: await readFile(resolve(scaffoldDir, 'index.html'), 'utf-8') },
+      { path: 'src/admin/template.html', content: await readFile(resolve(scaffoldDir, 'template.html'), 'utf-8') },
       { path: 'src/admin/styles.css', content: await readFile(resolve(scaffoldDir, 'styles.css'), 'utf-8') },
       { path: 'src/admin/admin.js', content: await readFile(resolve(scaffoldDir, 'admin.js'), 'utf-8') },
       { path: 'src/admin/init.lua', content: await readFile(resolve(scaffoldDir, 'init.lua'), 'utf-8') },
+      { path: 'src/admin/pages/acl.mu', content: await readFile(resolve(scaffoldDir, 'pages', 'acl.mu'), 'utf-8') },
+      { path: 'src/admin/pages/index.mu', content: await readFile(resolve(scaffoldDir, 'pages', 'index.mu'), 'utf-8') },
+      { path: 'src/admin/pages/preview.mu', content: await readFile(resolve(scaffoldDir, 'pages', 'preview.mu'), 'utf-8') },
+      { path: 'src/admin/pages/publish.mu', content: await readFile(resolve(scaffoldDir, 'pages', 'publish.mu'), 'utf-8') },
+      { path: 'src/admin/pages/templates.mu', content: await readFile(resolve(scaffoldDir, 'pages', 'templates.mu'), 'utf-8') },
+      { path: 'src/admin/partials/footer.mu', content: await readFile(resolve(scaffoldDir, 'partials', 'footer.mu'), 'utf-8') },
+      { path: 'src/admin/partials/header.mu', content: await readFile(resolve(scaffoldDir, 'partials', 'header.mu'), 'utf-8') },
+      { path: 'src/admin/partials/nav.mu', content: await readFile(resolve(scaffoldDir, 'partials', 'nav.mu'), 'utf-8') },
     )
   }
 

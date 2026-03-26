@@ -163,9 +163,17 @@ describe('createProject', () => {
     const ADMIN_FILES = [
       ...BASE_FILES,
       'src/admin/admin.js',
-      'src/admin/index.html',
       'src/admin/init.lua',
+      'src/admin/pages/acl.mu',
+      'src/admin/pages/index.mu',
+      'src/admin/pages/preview.mu',
+      'src/admin/pages/publish.mu',
+      'src/admin/pages/templates.mu',
+      'src/admin/partials/footer.mu',
+      'src/admin/partials/header.mu',
+      'src/admin/partials/nav.mu',
       'src/admin/styles.css',
+      'src/admin/template.html',
     ].sort()
 
     it('creates base files plus admin scaffold files', async () => {
@@ -206,11 +214,11 @@ describe('createProject', () => {
       expect(lua).toContain("require('admin')")
     })
 
-    it('admin init.lua renders and patches admin template', async () => {
+    it('admin init.lua publishes admin templates', async () => {
       await createProject('my-app', { admin: true }, tmp)
       const lua = await readFile(join(tmp, 'my-app/src/admin/init.lua'), 'utf-8')
-      expect(lua).toContain('admin.render()')
-      expect(lua).toContain('hyperstache.patch(')
+      expect(lua).toContain('admin.publish()')
+      expect(lua).toContain('hyperstache.publishTemplate,')
       expect(lua).toContain('return admin')
     })
 
