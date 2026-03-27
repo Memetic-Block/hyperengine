@@ -29,7 +29,16 @@ export async function publishProcess(
   const totalDone = logger.time('Publish total')
   logger.verbose(`Publishing process "${proc.name}"`)
 
-  const { TurboFactory } = await import('@ardrive/turbo-sdk')
+  let TurboFactory: typeof import('@ardrive/turbo-sdk').TurboFactory
+  try {
+    ;({ TurboFactory } = await import('@ardrive/turbo-sdk'))
+  } catch {
+    throw new Error(
+      '@ardrive/turbo-sdk is required for publishing but is not installed.\n\n' +
+      '  npm install @ardrive/turbo-sdk\n\n' +
+      'Then run the publish command again.',
+    )
+  }
   const turbo = TurboFactory.authenticated({ privateKey: wallet })
 
   // Check for WASM build artifact first

@@ -39,7 +39,6 @@
   "author": "Jim Toth",
   "license": "AGPL-3.0",
   "dependencies": {
-    "@ardrive/turbo-sdk": "^1.41.0",
     "@permaweb/aoconnect": "^0.0.93",
     "commander": "^12.1.0",
     "dotenv": "^17.3.1",
@@ -62,9 +61,6 @@
     }
   },
   "overrides": {
-    "@ardrive/turbo-sdk": {
-      "@permaweb/aoconnect": "$@permaweb/aoconnect"
-    },
     "elliptic": "^6.6.1",
     "ws": "^7.5.10"
   }

@@ -1061,7 +1061,13 @@ export default defineConfig({
 
 ### Publishing Modules
 
-The `publish` command uploads build artifacts to Arweave via [Turbo](https://ardrive.io/turbo/):
+The `publish` command uploads build artifacts to Arweave via [Turbo](https://ardrive.io/turbo/). It requires `@ardrive/turbo-sdk` to be installed in your project:
+
+```bash
+npm install @ardrive/turbo-sdk
+```
+
+If the package is not installed, the `publish` command will prompt you to install it.
 
 - **WASM modules**: Looks for `dist/<name>/process.wasm` (output of `ao build`), uploads with `Content-Type: application/wasm` and `Type: Module` tags
 - **Lua modules**: Uploads the bundled `.lua` file from `dist/` with `Content-Type: text/x-lua` and `Type: Module` tags
