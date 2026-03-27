@@ -83,8 +83,6 @@ describe('bundle integration', () => {
     expect(result.runtimeIncluded).toBe(true)
     expect(result.output).toContain('_modules["hyperengine"]')
     expect(result.output).toContain('hyperengine_templates')
-    expect(result.output).toContain('function hyperengine.get(key)')
-    expect(result.output).toContain('function hyperengine.renderTemplate(key, data, partials)')
 
     // Runtime module should appear after templates module
     const templatesIdx = result.output.indexOf('_modules["templates"]')

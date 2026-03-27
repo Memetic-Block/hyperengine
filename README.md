@@ -48,6 +48,7 @@ Bundled artifacts may optionally be output as aos modules ready to be build into
 - [CLI](#cli)
 - [Configuration](#configuration)
   - [Full Config Interface](#full-config-interface)
+- [Testing](#testing)
 - [How It Works](#how-it-works)
 - [Deploy & Publish](#deploy--publish)
   - [Configuration](#deploy-configuration)
@@ -1361,6 +1362,15 @@ interface HyperengineConfig {
   }
 }
 ```
+
+## Testing
+
+```bash
+npm test          # run tests once
+npm run test:watch # run tests in watch mode
+```
+
+TypeScript tests (vitest) cover the bundler pipeline, configuration, deployment, and code generation framework. Lua runtime behavior (handler logic, ACL, template rendering, state management) is tested separately with [busted](https://lunarmodules.github.io/busted/) and is not covered in the TypeScript test suite.
 
 ## How It Works
 
