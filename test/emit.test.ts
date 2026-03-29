@@ -23,15 +23,11 @@ describe('emitBundle', () => {
 
     const output = emitBundle(modules, templatesLua)
 
-    // Should have the module loader
-    expect(output).toContain('local _modules = {}')
-    expect(output).toContain('local function _require(name)')
-
     // Should register the dep module
-    expect(output).toContain('_modules["lib.utils"]')
+    expect(output).toContain('_G.package.loaded["lib.utils"]')
 
     // Should register the templates module
-    expect(output).toContain('_modules["templates"]')
+    expect(output).toContain('_G.package.loaded["templates"]')
 
     // Entry module source should appear at the end, unwrapped
     expect(output).toContain('local utils = require("lib.utils")')
@@ -51,7 +47,7 @@ describe('emitBundle', () => {
     ]
 
     const output = emitBundle(modules, null)
-    expect(output).not.toContain('_modules["templates"]')
+    expect(output).not.toContain('_G.package.loaded["templates"]')
     expect(output).toContain('print("hello")')
   })
 
@@ -71,12 +67,12 @@ describe('emitBundle', () => {
     const output = emitBundle(modules, templatesLua, runtimeLua)
 
     // Both modules should be registered
-    expect(output).toContain('_modules["templates"]')
-    expect(output).toContain('_modules["hyperengine"]')
+    expect(output).toContain('_G.package.loaded["templates"]')
+    expect(output).toContain('_G.package.loaded["hyperengine"]')
 
     // Runtime should appear after templates
-    const templatesIdx = output.indexOf('_modules["templates"]')
-    const runtimeIdx = output.indexOf('_modules["hyperengine"]')
+    const templatesIdx = output.indexOf('_G.package.loaded["templates"]')
+    const runtimeIdx = output.indexOf('_G.package.loaded["hyperengine"]')
     expect(runtimeIdx).toBeGreaterThan(templatesIdx)
   })
 
@@ -165,15 +161,15 @@ describe('emitBundle', () => {
     const output = emitBundle(modules, templatesLua, runtimeLua, false, undefined, lustacheModules)
 
     // All lustache modules should be registered
-    expect(output).toContain('_modules["lustache.scanner"]')
-    expect(output).toContain('_modules["lustache.context"]')
-    expect(output).toContain('_modules["lustache.renderer"]')
-    expect(output).toContain('_modules["lustache"]')
+    expect(output).toContain('_G.package.loaded["lustache.scanner"]')
+    expect(output).toContain('_G.package.loaded["lustache.context"]')
+    expect(output).toContain('_G.package.loaded["lustache.renderer"]')
+    expect(output).toContain('_G.package.loaded["lustache"]')
 
     // Lustache modules should appear before templates and runtime
-    const lustacheIdx = output.indexOf('_modules["lustache.scanner"]')
-    const templatesIdx = output.indexOf('_modules["templates"]')
-    const runtimeIdx = output.indexOf('_modules["hyperengine"]')
+    const lustacheIdx = output.indexOf('_G.package.loaded["lustache.scanner"]')
+    const templatesIdx = output.indexOf('_G.package.loaded["templates"]')
+    const runtimeIdx = output.indexOf('_G.package.loaded["hyperengine"]')
     expect(lustacheIdx).toBeLessThan(templatesIdx)
     expect(lustacheIdx).toBeLessThan(runtimeIdx)
   })
@@ -199,7 +195,6 @@ describe('emitModule', () => {
 
     // The bundle content should be indented inside _init
     expect(output).toContain('  -- Bundled by hyperengine')
-    expect(output).toContain('  local _modules = {}')
 
     // Entry source should still be present (inside _init)
     expect(output).toContain('print("hello")')
@@ -227,8 +222,8 @@ describe('emitModule', () => {
     expect(output).toContain('local function _init()')
     expect(output).toContain('return {}')
     // Inner content should be indented
-    expect(output).toContain('  _modules["lib.utils"]')
-    expect(output).toContain('  _modules["templates"]')
+    expect(output).toContain('  _G.package.loaded["lib.utils"]')
+    expect(output).toContain('  _G.package.loaded["templates"]')
   })
 
   it('ends with _init() call and return {}', () => {

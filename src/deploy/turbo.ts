@@ -23,7 +23,8 @@ export async function loadTurboSDK(): Promise<TurboSDK> {
     // Variable indirection prevents TypeScript from resolving the specifier during DTS emit
     const id = '@ardrive/turbo-sdk'
     return await (import(id) as Promise<unknown>) as TurboSDK
-  } catch {
+  } catch (err) {
+    console.error(err)
     throw new Error(
       '@ardrive/turbo-sdk is required for publishing but is not installed.\n\n' +
       '  npm install @ardrive/turbo-sdk\n\n' +

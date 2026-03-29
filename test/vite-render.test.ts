@@ -381,8 +381,8 @@ describe('bundle with vite templates', () => {
     // Mustache expressions preserved through the entire pipeline
     expect(result.output).toContain('{{title}}')
     expect(result.output).toContain('{{username}}')
-    // Module loader present
-    expect(result.output).toContain('local _modules = {}')
+    // Bundle marker present
+    expect(result.output).toContain('-- Bundled by hyperengine')
     // No externals configured
     expect(result.viteExternals).toEqual([])
   })

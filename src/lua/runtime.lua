@@ -49,7 +49,7 @@ end
 
 ---@type ACL Role-based access control list; `{ [address] = { [role] = true } }`.
 if not hyperengine_acl then
-  hyperengine_acl = { [Owner] = { owner = true } }
+  hyperengine_acl = { [ao.env.Process.Owner] = { owner = true } }
 end
 
 ---@type PatchMap Accumulated HTML patches keyed by patch path, sent to `patch@1.0`.

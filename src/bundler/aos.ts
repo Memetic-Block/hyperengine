@@ -85,8 +85,12 @@ export async function copyAosProcessFiles(repoPath: string, outDir: string): Pro
  * Tracks parenthesis depth to handle multi-line handler registrations,
  * then inserts `require("{moduleName}")` on the line after the closing paren.
  * Falls back to appending at end of file if no Handlers call is found.
+ *
+ * When `bundleContent` is provided, the bundle is registered via
+ * `_G.package.loaded` immediately before the `require(".{moduleName}")` call
+ * so it resolves without a separate file.
  */
-export async function injectRequire(processLuaPath: string, moduleName: string): Promise<void> {
+export async function injectRequire(processLuaPath: string, moduleName: string, bundleContent?: string): Promise<void> {
   const content = await readFile(processLuaPath, 'utf-8')
   const lines = content.split('\n')
 
@@ -117,14 +121,28 @@ export async function injectRequire(processLuaPath: string, moduleName: string):
     }
   }
 
-  const requireLine = `  require(".${moduleName}")`
+  // Build the lines to inject: optional bundle definition + require call
+  const injectLines: string[] = []
+
+  if (bundleContent != null) {
+    const fnName = moduleName.replace(/[^a-zA-Z0-9_]/g, '_')
+    injectLines.push(
+      `-- module: ".${moduleName}"`,
+      `local function _loaded_mod_${fnName}()`,
+      ...bundleContent.split('\n').map(l => `  ${l}`),
+      'end',
+      `_G.package.loaded[".${moduleName}"] = _loaded_mod_${fnName}()`,
+    )
+  }
+
+  injectLines.push(`  require(".${moduleName}")`)
 
   if (lastHandlerEnd >= 0) {
     // Insert after the last handler call
-    lines.splice(lastHandlerEnd + 1, 0, '', requireLine)
+    lines.splice(lastHandlerEnd + 1, 0, '', ...injectLines)
   } else {
     // No handler calls found — append at end
-    lines.push('', requireLine)
+    lines.push('', ...injectLines)
   }
 
   await writeFile(processLuaPath, lines.join('\n'), 'utf-8')

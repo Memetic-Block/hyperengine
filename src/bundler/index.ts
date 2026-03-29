@@ -150,12 +150,20 @@ export async function bundleProcess(
   // 6. Determine output paths
   // When aos is enabled (for processes only), nest under processName subdir
   const processOutDir = useAos ? resolve(process.outDir, process.name) : process.outDir
-  const outFile = useAos ? `${process.name}.lua` : process.outFile
-  const outPath = resolve(processOutDir, outFile)
-  await mkdir(dirname(outPath), { recursive: true })
-  await writeFile(outPath, output, 'utf-8')
+  let outPath: string
+  if (useAos) {
+    // AOS builds inline the bundle into process.lua via package.preload,
+    // so we only need the subdirectory — no separate bundle file.
+    await mkdir(processOutDir, { recursive: true })
+    outPath = resolve(processOutDir, 'process.lua')
+  } else {
+    const outFile = process.outFile
+    outPath = resolve(processOutDir, outFile)
+    await mkdir(dirname(outPath), { recursive: true })
+    await writeFile(outPath, output, 'utf-8')
+  }
 
-  // 7. Handle aos module output: clone repo, copy files, inject require, write YAML (processes only)
+  // 7. Handle aos module output: clone repo, copy files, inject require with inline bundle, write YAML (processes only)
   let aosCopiedFiles: string[] = []
   let aosYamlPath: string | null = null
   let aosExcludedModules: string[] = []
@@ -163,7 +171,7 @@ export async function bundleProcess(
     const repoPath = await ensureAosRepo(aos.commit, process.root)
     aosCopiedFiles = await copyAosProcessFiles(repoPath, processOutDir)
     const aosProcessLua = resolve(processOutDir, 'process.lua')
-    await injectRequire(aosProcessLua, process.name)
+    await injectRequire(aosProcessLua, process.name, output)
     aosExcludedModules = await stripRequires(aosProcessLua, aos.exclude)
     aosYamlPath = await writeAosYaml(processOutDir, {
       stack_size: aos.stack_size,

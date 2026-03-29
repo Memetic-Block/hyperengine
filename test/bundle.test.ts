@@ -35,13 +35,13 @@ describe('bundle integration', () => {
     expect(result.templateCount).toBe(2)
 
     // Output should contain the module loader
-    expect(result.output).toContain('local _modules = {}')
+    expect(result.output).toContain('-- Bundled by hyperengine')
 
     // Output should contain the utils module
-    expect(result.output).toContain('_modules["lib.utils"]')
+    expect(result.output).toContain('_G.package.loaded["lib.utils"]')
 
     // Output should contain inlined templates
-    expect(result.output).toContain('_modules["templates"]')
+    expect(result.output).toContain('_G.package.loaded["templates"]')
     expect(result.output).toContain('{{title}}')
     expect(result.output).toContain('{{username}}')
 
@@ -52,17 +52,17 @@ describe('bundle integration', () => {
     expect(result.unresolved).not.toContain('lustache')
 
     // Lustache modules should be embedded in the bundle
-    expect(result.output).toContain('_modules["lustache"]')
-    expect(result.output).toContain('_modules["lustache.renderer"]')
-    expect(result.output).toContain('_modules["lustache.scanner"]')
-    expect(result.output).toContain('_modules["lustache.context"]')
+    expect(result.output).toContain('_G.package.loaded["lustache"]')
+    expect(result.output).toContain('_G.package.loaded["lustache.renderer"]')
+    expect(result.output).toContain('_G.package.loaded["lustache.scanner"]')
+    expect(result.output).toContain('_G.package.loaded["lustache.context"]')
 
     // Process name should be set
     expect(result.processName).toBe('main')
 
     // Runtime always included
     expect(result.runtimeIncluded).toBe(true)
-    expect(result.output).toContain('_modules["hyperengine"]')
+    expect(result.output).toContain('_G.package.loaded["hyperengine"]')
   })
 
   it('bundles with runtime module included by default', async () => {
@@ -81,12 +81,12 @@ describe('bundle integration', () => {
     const result = results[0]
 
     expect(result.runtimeIncluded).toBe(true)
-    expect(result.output).toContain('_modules["hyperengine"]')
+    expect(result.output).toContain('_G.package.loaded["hyperengine"]')
     expect(result.output).toContain('hyperengine_templates')
 
     // Runtime module should appear after templates module
-    const templatesIdx = result.output.indexOf('_modules["templates"]')
-    const runtimeIdx = result.output.indexOf('_modules["hyperengine"]')
+    const templatesIdx = result.output.indexOf('_G.package.loaded["templates"]')
+    const runtimeIdx = result.output.indexOf('_G.package.loaded["hyperengine"]')
     expect(runtimeIdx).toBeGreaterThan(templatesIdx)
   })
 
@@ -136,7 +136,7 @@ describe('bundle integration', () => {
     expect(result.adminIncluded).toBe(true)
 
     // Admin module should be registered (resolved from src/admin/init.lua)
-    expect(result.output).toContain('_modules["admin"]')
+    expect(result.output).toContain('_G.package.loaded["admin"]')
 
     // Should auto-require admin in entry section
     const entryIdx = result.output.indexOf('-- Entry point')
@@ -150,7 +150,7 @@ describe('bundle integration', () => {
     expect(result.output).toContain('patch@1.0')
 
     // Admin Lua should use hyperengine.patch() on init (no Send) and publish() on mutations
-    const adminModIdx = result.output.indexOf('_modules["admin"]')
+    const adminModIdx = result.output.indexOf('_loaded_mod_admin')
     const adminSection = result.output.slice(adminModIdx)
     expect(adminSection).toContain('hyperengine.patch(')
     expect(adminSection).toContain('hyperengine.publish(')
@@ -179,7 +179,7 @@ describe('bundle integration', () => {
 
     expect(result.adminIncluded).toBe(true)
     // Admin module resolved and registered
-    expect(result.output).toContain('_modules["admin"]')
+    expect(result.output).toContain('_G.package.loaded["admin"]')
     // Admin template collected
     expect(result.output).toContain('_templates["admin/index.html"]')
   })
@@ -200,7 +200,7 @@ describe('bundle integration', () => {
     const result = results[0]
 
     // Admin module should have injected path
-    const adminModIdx = result.output.indexOf('_modules["admin"]')
+    const adminModIdx = result.output.indexOf('_loaded_mod_admin')
     const adminSection = result.output.slice(adminModIdx)
     expect(adminSection).toContain('local _path = \"manage\"')
     expect(adminSection).not.toContain('local _path = \"admin\"')

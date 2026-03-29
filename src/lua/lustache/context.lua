@@ -1,5 +1,14 @@
-local string_find, string_split, tostring, type =
-      string.find, string.split, tostring, type
+local function string_split(str, delimiter)
+  local returnTable = {}
+  for k, v in string.gmatch(str, "([^" .. delimiter .. "]+)") 
+  do
+      returnTable[#returnTable+1] = k
+  end
+  return returnTable
+end
+
+local string_find, tostring, type =
+      string.find, tostring, type
 
 local context = {}
 context.__index = context

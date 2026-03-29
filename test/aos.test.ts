@@ -118,6 +118,83 @@ describe('injectRequire', () => {
     const closingLine = lines.indexOf(')')
     expect(requireIdx).toBeGreaterThan(closingLine)
   })
+
+  it('injects bundle content right before require after handlers', async () => {
+    const lua = [
+      'Handlers.add("Init",',
+      '  function(msg) return true end,',
+      '  function(msg) print("init") end',
+      ')',
+    ].join('\n')
+
+    const bundle = 'local x = 1\nprint("hello")\nreturn {}'
+
+    const filePath = join(dir, 'process.lua')
+    await writeFile(filePath, lua, 'utf-8')
+    await injectRequire(filePath, 'main', bundle)
+
+    const result = await readFile(filePath, 'utf-8')
+    const lines = result.split('\n')
+
+    // Original handler content should be at the top, unchanged
+    expect(lines[0]).toBe('Handlers.add("Init",')
+
+    // Bundle definition + registration should appear after the handler block
+    const modCommentIdx = lines.findIndex(l => l === '-- module: ".main"')
+    expect(modCommentIdx).toBeGreaterThan(-1)
+    expect(lines[modCommentIdx + 1]).toBe('local function _loaded_mod_main()')
+    expect(lines[modCommentIdx + 2]).toBe('  local x = 1')
+    expect(lines[modCommentIdx + 3]).toBe('  print("hello")')
+    expect(lines[modCommentIdx + 4]).toBe('  return {}')
+    expect(lines[modCommentIdx + 5]).toBe('end')
+    expect(lines[modCommentIdx + 6]).toBe('_G.package.loaded[".main"] = _loaded_mod_main()')
+
+    // require(".main") should be immediately after the registration
+    const requireIdx = lines.findIndex(l => l.trim() === 'require(".main")')
+    expect(requireIdx).toBe(modCommentIdx + 7)
+
+    // Original handler content preserved
+    expect(result).toContain('Handlers.add("Init"')
+  })
+
+  it('injects bundle content without handlers (appended at end)', async () => {
+    const lua = 'print("hello")\nlocal x = 1'
+    const bundle = 'return { greet = function() end }'
+
+    const filePath = join(dir, 'process.lua')
+    await writeFile(filePath, lua, 'utf-8')
+    await injectRequire(filePath, 'worker', bundle)
+
+    const result = await readFile(filePath, 'utf-8')
+    const lines = result.split('\n')
+
+    // Original content at the top
+    expect(lines[0]).toBe('print("hello")')
+    expect(lines[1]).toBe('local x = 1')
+
+    // Bundle definition + registration + require appended at end
+    expect(result).toContain('-- module: ".worker"')
+    expect(result).toContain('local function _loaded_mod_worker()')
+    expect(result).toContain('  return { greet = function() end }')
+    expect(result).toContain('_G.package.loaded[".worker"] = _loaded_mod_worker()')
+    expect(result).toContain('require(".worker")')
+
+    // Registration should come before require
+    const regIdx = lines.findIndex(l => l.includes('_G.package.loaded[".worker"]'))
+    const requireIdx = lines.findIndex(l => l.trim() === 'require(".worker")')
+    expect(regIdx).toBeLessThan(requireIdx)
+  })
+
+  it('does not inject package.loaded when bundleContent is omitted', async () => {
+    const lua = 'Handlers.add("X",\n  function() end,\n  function() end\n)'
+    const filePath = join(dir, 'process.lua')
+    await writeFile(filePath, lua, 'utf-8')
+    await injectRequire(filePath, 'main')
+
+    const result = await readFile(filePath, 'utf-8')
+    expect(result).not.toContain('_G.package.loaded')
+    expect(result).toContain('require(".main")')
+  })
 })
 
 describe('copyAosProcessFiles', () => {

@@ -196,14 +196,14 @@ describe('multi-process bundling', () => {
     // Main process: has lib.utils + entry, has templates
     expect(main.moduleCount).toBe(2)
     expect(main.templateCount).toBe(1) // index.html
-    expect(main.output).toContain('_modules["lib.utils"]')
-    expect(main.output).toContain('_modules["templates"]')
+    expect(main.output).toContain('_G.package.loaded["lib.utils"]')
+    expect(main.output).toContain('_G.package.loaded["templates"]')
     expect(main.output).toContain("require('lib.utils')")
     expect(main.outPath).toContain('process.lua')
 
     // Worker process: has lib.utils + entry, no templates dir specific to worker
     expect(worker.moduleCount).toBe(2)
-    expect(worker.output).toContain('_modules["lib.utils"]')
+    expect(worker.output).toContain('_G.package.loaded["lib.utils"]')
     expect(worker.output).toContain("require('lib.utils')")
     expect(worker.outPath).toContain('worker.lua')
   })
@@ -224,7 +224,7 @@ describe('multi-process bundling', () => {
 
     expect(result.processName).toBe('worker')
     expect(result.moduleCount).toBe(2) // lib.utils + worker entry
-    expect(result.output).toContain('_modules["lib.utils"]')
+    expect(result.output).toContain('_G.package.loaded["lib.utils"]')
     expect(result.output).toContain("require('lib.utils')")
   })
 
@@ -244,7 +244,6 @@ describe('multi-process bundling', () => {
 
     // Should use raw emitBundle (no _init wrapper)
     expect(reader.output).toContain('-- Bundled by hyperengine')
-    expect(reader.output).toContain('local _modules = {}')
     expect(reader.output).not.toContain('local function _init()')
     expect(reader.output).not.toContain('return {}')
 
@@ -257,7 +256,7 @@ describe('multi-process bundling', () => {
 
     // Should resolve its module
     expect(reader.moduleCount).toBe(2) // lib.utils + reader entry
-    expect(reader.output).toContain('_modules["lib.utils"]')
+    expect(reader.output).toContain('_G.package.loaded["lib.utils"]')
   })
 
   it('module-type skips aos even when aos config is present', async () => {

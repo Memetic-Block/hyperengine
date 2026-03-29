@@ -860,8 +860,8 @@ When `aos` is set, the build changes for `type: 'process'` entries (the default)
 
 1. **Clones the aos repo** at the specified commit from `https://github.com/permaweb/aos`
 2. **Copies all `.lua` files** from the repo's `process/` directory into your output
-3. **Wraps your bundle as a module** — your bundled Lua is output as `{processName}.lua` instead of `process.lua`, wrapped so all side effects (handler registration, etc.) execute on `require()`
-4. **Injects `require(".{processName}")`** into the copied `process.lua` after the last `Handlers.add`/`Handlers.append` call
+3. **Wraps your bundle as a module** — your bundled Lua is registered as a `package.preload` entry directly inside the copied `process.lua`, so all code is contained in a single file that the WASM runtime can load
+4. **Injects `require(".{processName}")`** into the copied `process.lua` after the last `Handlers.add`/`Handlers.append` call, which triggers the preloaded bundle
 5. **Generates a `config.yml`** with ao-dev-cli options (memory settings, WASM target, compute limit, module format)
 
 Entries with `type: 'module'` are **not affected** by the `aos` option — they always produce a raw bundle output without any AOS integration.
@@ -871,8 +871,7 @@ The result is a directory structure compatible with `ao cli build`:
 ```
 dist/
   main/
-    main.lua          ← your bundled code (as a module)
-    process.lua       ← from aos repo, with require("main") injected
+    process.lua       ← from aos repo, with your bundled code inlined via package.preload
     config.yml        ← ao-dev-cli configuration
     handlers.lua      ← other aos process files
     ...
@@ -883,11 +882,9 @@ With multiple processes, each gets its own subdirectory:
 ```
 dist/
   main/
-    main.lua
     process.lua
     config.yml
   worker/
-    worker.lua
     process.lua
     config.yml
 ```

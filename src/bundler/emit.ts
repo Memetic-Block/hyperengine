@@ -13,10 +13,19 @@ export interface EmitOptions {
 }
 
 /**
+ * Convert a module name to a valid Lua identifier for use as a function name.
+ * Replaces dots, hyphens, and other non-alphanumeric characters with underscores.
+ */
+export function getModFnName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_]/g, '_')
+}
+
+/**
  * Emit a single bundled Lua file from resolved modules and a templates module.
  *
- * The output wraps each module in a function inside a package loader,
- * so `require("module.name")` works within the AO runtime.
+ * Each dependency module is wrapped in a loader function and registered via
+ * `_G.package.loaded["module.name"]` so that `require("module.name")` works
+ * within the AO runtime without overloading `require`.
  */
 export function emitBundle(
   modules: LuaModule[],
@@ -27,67 +36,76 @@ export function emitBundle(
   lustacheModules?: LustacheModule[],
 ): string {
   const lines: string[] = []
+  // Track module names for the package.loaded assignments at the end
+  const registeredModules: string[] = []
 
-  // Module loader preamble
   lines.push('-- Bundled by hyperengine')
-  lines.push('local _modules = {}')
-  lines.push('local _loaded = {}')
-  lines.push('local _original_require = require')
-  lines.push('')
-  lines.push('local function _require(name)')
-  lines.push('  if _loaded[name] then return _loaded[name] end')
-  lines.push('  if _modules[name] then')
-  lines.push('    _loaded[name] = _modules[name]()')
-  lines.push('    return _loaded[name]')
-  lines.push('  end')
-  lines.push('  return _original_require(name)')
-  lines.push('end')
-  lines.push('require = _require')
   lines.push('')
 
-  // Lustache modules (registered before templates and runtime so require("lustache") resolves)
+  // Lustache modules (defined before templates and runtime so require("lustache") resolves)
   if (lustacheModules) {
     for (const mod of lustacheModules) {
-      lines.push(`_modules["${mod.name}"] = function()`)
+      const fnName = getModFnName(mod.name)
+      lines.push(`-- module: "${mod.name}"`)
+      lines.push(`local function _loaded_mod_${fnName}()`)
       for (const line of mod.source.split('\n')) {
         lines.push(`  ${line}`)
       }
       lines.push('end')
       lines.push('')
+      registeredModules.push(mod.name)
     }
   }
 
   // Templates module (if any)
   if (templatesLuaSource) {
-    lines.push('_modules["templates"] = function()')
+    const fnName = getModFnName('templates')
+    lines.push(`-- module: "templates"`)
+    lines.push(`local function _loaded_mod_${fnName}()`)
     for (const line of templatesLuaSource.split('\n')) {
       lines.push(`  ${line}`)
     }
     lines.push('end')
     lines.push('')
+    registeredModules.push('templates')
   }
 
-  // Runtime module (if any) — registered after templates so require('templates') resolves
+  // Runtime module (if any) — defined after templates so require('templates') resolves
   if (runtimeLuaSource) {
-    lines.push('_modules["hyperengine"] = function()')
+    const fnName = getModFnName('hyperengine')
+    lines.push(`-- module: "hyperengine"`)
+    lines.push(`local function _loaded_mod_${fnName}()`)
     for (const line of runtimeLuaSource.split('\n')) {
       lines.push(`  ${line}`)
     }
     lines.push('end')
     lines.push('')
+    registeredModules.push('hyperengine')
   }
 
   // Find the entry module (last one in the array by convention)
   const entryModule = modules[modules.length - 1]
   const depModules = modules.slice(0, -1)
 
-  // Register dependency modules
+  // Define dependency module loader functions
   for (const mod of depModules) {
-    lines.push(`_modules["${mod.name}"] = function()`)
+    const fnName = getModFnName(mod.name)
+    lines.push(`-- module: "${mod.name}"`)
+    lines.push(`local function _loaded_mod_${fnName}()`)
     for (const line of mod.source.split('\n')) {
       lines.push(`  ${line}`)
     }
     lines.push('end')
+    lines.push('')
+    registeredModules.push(mod.name)
+  }
+
+  // Register all modules in package.loaded so require() resolves them
+  for (const name of registeredModules) {
+    const fnName = getModFnName(name)
+    lines.push(`_G.package.loaded["${name}"] = _loaded_mod_${fnName}()`)
+  }
+  if (registeredModules.length > 0) {
     lines.push('')
   }
 
