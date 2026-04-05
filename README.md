@@ -285,6 +285,7 @@ Use `--config` to specify a config file instead of the auto-detected `hyperengin
 
 ```bash
 npx hyperengine build --config path/to/my-config.ts
+npx hyperengine deploy --config path/to/my-config.ts
 ```
 
 ## Vite Template Processing
@@ -1194,6 +1195,7 @@ hyperengine deploy --debug
 Options for all commands:
 
 - `-r, --root <dir>` — Project root directory (default: `.`)
+- `-c, --config <path>` — Path to config file (default: auto-detect) (build/deploy)
 - `-p, --process <name>` — Target a specific process (build/publish/deploy)
 - `--all` — Smoke-test all ao module processes (smoke)
 

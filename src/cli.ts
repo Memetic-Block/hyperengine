@@ -175,13 +175,14 @@ program
   .command('deploy')
   .description('Spawn AO processes and load bundled Lua code')
   .option('-r, --root <dir>', 'Project root directory', '.')
+  .option('-c, --config <path>', 'Path to config file (default: auto-detect)')
   .option('-p, --process <name>', 'Deploy only the named process')
   .option('-v, --verbose', 'Show detailed operation logs')
   .option('-D, --debug', 'Show all details including payloads')
   .action(async (opts) => {
     const root = resolve(opts.root)
     const logger = createLogger({ verbose: opts.verbose, debug: opts.debug })
-    const config = await loadConfig(root)
+    const config = await loadConfig(root, opts.config)
 
     if (!config.deploy.wallet) {
       console.error('No wallet configured. Set WALLET_PATH env var or deploy.wallet in config.')
