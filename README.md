@@ -1007,6 +1007,8 @@ Environment variables take precedence over config file values.
 
 Hyperengine automatically loads a `.env` file from your project root when running any CLI command. Variables defined in `.env` are applied to `process.env` **without overwriting** existing environment variables.
 
+When the `--root` flag points to a subdirectory (e.g. `--root modules/core`), Hyperengine first loads `<root>/.env`, then falls back to `<cwd>/.env` for any variables not already set. This lets you keep a single `.env` in your workspace root for monorepo setups.
+
 ```bash
 # .env
 WALLET_PATH=./wallet.json

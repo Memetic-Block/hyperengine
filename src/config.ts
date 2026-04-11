@@ -6,9 +6,15 @@ import type { UserConfig as ViteUserConfig } from 'vite'
 
 /**
  * Load a .env file into process.env without overwriting existing values.
+ * When root differs from cwd, also loads cwd .env as a fallback (root takes priority).
  */
 export function loadDotenv(root: string): void {
-  dotenvConfig({ path: resolve(root, '.env'), quiet: true })
+  const resolvedRoot = resolve(root)
+  dotenvConfig({ path: resolve(resolvedRoot, '.env'), quiet: true })
+  const cwd = process.cwd()
+  if (resolvedRoot !== cwd) {
+    dotenvConfig({ path: resolve(cwd, '.env'), quiet: true })
+  }
 }
 
 export interface ExternalDep {
@@ -224,9 +230,10 @@ export interface ResolvedDeployConfig {
 
 export function resolveDeployConfig(raw?: DeployConfig): ResolvedDeployConfig {
   const scheduler = raw?.scheduler ?? DEFAULT_SCHEDULER
+  const envWallet = process.env.WALLET_PATH
   return {
     hyperbeamUrl: process.env.HYPERBEAM_URL || raw?.hyperbeamUrl || undefined,
-    wallet: process.env.WALLET_PATH || raw?.wallet || undefined,
+    wallet: envWallet ? resolve(envWallet) : raw?.wallet || undefined,
     scheduler,
     authority: raw?.authority ?? scheduler,
     spawnTags: raw?.spawnTags ?? [],

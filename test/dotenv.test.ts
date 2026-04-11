@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { loadDotenv } from '../src/config.js'
@@ -70,5 +70,37 @@ describe('loadDotenv', () => {
     await writeFile(join(tmp, '.env'), 'TEST_DOTENV_EQ=a=b=c\n')
     loadDotenv(tmp)
     expect(process.env.TEST_DOTENV_EQ).toBe('a=b=c')
+  })
+
+  it('falls back to cwd .env when root has no .env', async () => {
+    track('TEST_DOTENV_CWD')
+    const subdir = join(tmp, 'child')
+    await mkdir(subdir)
+    // .env only in tmp (acting as cwd), not in subdir (acting as root)
+    await writeFile(join(tmp, '.env'), 'TEST_DOTENV_CWD=from_cwd\n')
+    const origCwd = process.cwd()
+    process.chdir(tmp)
+    try {
+      loadDotenv(subdir)
+      expect(process.env.TEST_DOTENV_CWD).toBe('from_cwd')
+    } finally {
+      process.chdir(origCwd)
+    }
+  })
+
+  it('root .env takes priority over cwd .env', async () => {
+    track('TEST_DOTENV_PRIO')
+    const subdir = join(tmp, 'child')
+    await mkdir(subdir)
+    await writeFile(join(tmp, '.env'), 'TEST_DOTENV_PRIO=cwd_val\n')
+    await writeFile(join(subdir, '.env'), 'TEST_DOTENV_PRIO=root_val\n')
+    const origCwd = process.cwd()
+    process.chdir(tmp)
+    try {
+      loadDotenv(subdir)
+      expect(process.env.TEST_DOTENV_PRIO).toBe('root_val')
+    } finally {
+      process.chdir(origCwd)
+    }
   })
 })

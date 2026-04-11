@@ -2,7 +2,7 @@ import { defineConfig, DEFAULT_AOS_COMMIT } from '../../src/config.js'
 
 export default defineConfig({
   processes: {
-    main: { entry: 'src/process.lua' },
+    admin_ui: { entry: 'src/process.lua' },
   },
   templates: {
     vite: {

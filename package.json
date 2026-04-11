@@ -21,8 +21,11 @@
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "build:modules": "node dist/cli.js build --root modules/core && node dist/cli.js build --root modules/admin-ui",
+    "bundle:modules": "node dist/cli.js build --root modules/core && node dist/cli.js build --root modules/admin-ui",
+    "build:modules": "cd modules/core/dist/core && ao build && cd - && cd modules/admin-ui/dist/admin_ui && ao build && cd -",
     "publish:modules": "node dist/cli.js publish --root modules/core && node dist/cli.js publish --root modules/admin-ui",
+    "smoke:modules": "node dist/cli.js smoke --root modules/core && node dist/cli.js smoke --root modules/admin-ui",
+    "release:modules": "npm run bundle:modules && npm run build:modules && npm run publish:modules",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
