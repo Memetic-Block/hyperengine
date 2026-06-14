@@ -1071,7 +1071,7 @@ export default defineConfig({
 
 ### Uploading WASM Modules
 
-Hyperengine no longer bundles an Arweave upload command. Build your WASM module with `ao build`, then upload the resulting `dist/<name>/process.wasm` to Arweave using any Arweave upload/bundler tool you prefer.
+Build your WASM module with `ao build`, then upload the resulting `dist/<name>/process.wasm` to Arweave using any Arweave upload/bundler tool you prefer.
 
 When uploading an AO WASM module, include the standard AO module tags so it can be used as a custom module:
 
