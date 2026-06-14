@@ -18,7 +18,6 @@ vi.mock('@permaweb/aoconnect', () => ({
 }))
 
 import { deployProcess } from '../src/deploy/deploy.js'
-import { writeManifest } from '../src/deploy/manifest.js'
 import { createLogger } from '../src/deploy/logger.js'
 import { AOS_MODULE_ID } from '../src/config.js'
 import type { ResolvedProcessConfig, ResolvedDeployConfig } from '../src/config.js'
@@ -99,22 +98,6 @@ describe('deployProcess', () => {
       }),
     )
     // No Eval step for module builds
-    expect(mockMessage).not.toHaveBeenCalled()
-  })
-
-  it('reads moduleId from deploy manifest when not in config', async () => {
-    const proc = makeProc()
-    // Create a WASM artifact to trigger module-build path
-    await mkdir(join(tmp, 'dist', 'main'), { recursive: true })
-    await writeFile(join(tmp, 'dist', 'main', 'process.wasm'), Buffer.alloc(4))
-    // Write manifest with moduleId
-    await writeManifest(tmp, {
-      processes: { main: { moduleId: 'manifest-module-id', deployedAt: '2025-01-01T00:00:00Z' } },
-    })
-
-    const result = await deployProcess(proc, deployConfig, wallet, tmp)
-
-    expect(result.moduleId).toBe('manifest-module-id')
     expect(mockMessage).not.toHaveBeenCalled()
   })
 

@@ -20,7 +20,6 @@ export default defineConfig({
     'vite',
     'esbuild',
     '@permaweb/aoconnect',
-    '@ardrive/turbo-sdk',
     'dotenv',
   ],
   onSuccess: async () => {

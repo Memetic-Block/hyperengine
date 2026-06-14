@@ -3,8 +3,6 @@ import { join } from 'node:path'
 import type { JWK } from './wallet.js'
 import type { ResolvedProcessConfig, ResolvedDeployConfig } from '../config.js'
 import { AOS_MODULE_ID, DEFAULT_SCHEDULER } from '../config.js'
-import type { ProcessManifestEntry } from './manifest.js'
-import { readManifest } from './manifest.js'
 import { defaultLogger } from './logger.js'
 import type { Logger } from './logger.js'
 
@@ -90,18 +88,17 @@ export async function deployProcess(
   // Resolve the module ID for the spawn
   let moduleId: string
   if (hasWasm || proc.moduleId) {
-    // WASM module build: use the published module ID
+    // WASM module build: use the module ID from config
     logger.verbose(`Module resolution: WASM/custom module path`)
-    moduleId = proc.moduleId
-      ?? (await readManifest(root)).processes[proc.name]?.moduleId
-      ?? ''
+    moduleId = proc.moduleId ?? ''
     if (!moduleId) {
       throw new Error(
         `No module ID found for "${proc.name}". ` +
-        `Run \`hyperengine publish --process ${proc.name}\` first to upload the WASM module.`,
+        `Upload the WASM module to Arweave (using any Arweave bundler/upload tool) ` +
+        `and set \`moduleId\` on the "${proc.name}" process in your hyperengine config.`,
       )
     }
-    logger.verbose(`Resolved moduleId: ${moduleId} (source: ${proc.moduleId ? 'config' : 'manifest'})`)
+    logger.verbose(`Resolved moduleId: ${moduleId} (source: config)`)
   } else {
     // Standard single-file process: use the default AOS module
     moduleId = AOS_MODULE_ID
