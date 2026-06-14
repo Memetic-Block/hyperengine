@@ -106,7 +106,8 @@ export interface ProcessConfig {
   /** Key under which template and ACL state is synced to `patch@1.0`.
    *  State is nested as `{ templates: ..., acl: ... }` under this key. (default: "hyperengine_state") */
   stateKey?: string
-  /** Published module transaction ID (for WASM module builds). Set after `publish`. */
+  /** Arweave transaction ID of the uploaded WASM module (for WASM module builds).
+   *  Upload the built module with any Arweave bundler/upload tool, then set this. */
   moduleId?: string
 }
 
@@ -153,7 +154,7 @@ export interface HyperengineConfig {
   stateKey?: string
   /** Build as an aos module — clones the aos repo at the given commit and outputs the user's bundle as a require()'d module */
   aos?: AosConfig
-  /** Deploy & publish configuration */
+  /** Deploy configuration */
   deploy?: DeployConfig
 }
 

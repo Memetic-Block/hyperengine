@@ -1,6 +1,6 @@
 # hyperengine
 
-Framework for bundling [AO](https://ao.arweave.net) Lua processes for deployment on [HyperBEAM](https://hyperbeam.arweave.net) with
+Experimental framework for bundling [AO](https://ao.arweave.net) Lua processes for deployment on [HyperBEAM](https://hyperbeam.arweave.net) with
 [Mustache](https://mustache.github.io/) templating and optional [Luarocks](https://luarocks.org/) support.
 
 HTML templates are inlined as Lua string constants and rendered at runtime using a bundled [lustache](https://github.com/Olivine-Labs/lustache) engine inside the AO process.
@@ -50,12 +50,12 @@ Bundled artifacts may optionally be output as aos modules ready to be build into
   - [Full Config Interface](#full-config-interface)
 - [Testing](#testing)
 - [How It Works](#how-it-works)
-- [Deploy & Publish](#deploy--publish)
+- [Deploy](#deploy)
   - [Configuration](#deploy-configuration)
   - [.env File Support](#env-file-support)
   - [Single-File Process Deploy](#single-file-process-deploy)
   - [Module Build Deploy](#module-build-deploy)
-  - [Publishing Modules](#publishing-modules)
+  - [Uploading WASM Modules](#uploading-wasm-modules)
   - [Deploy Manifest](#deploy-manifest)
 - [Rockspec Generation](#rockspec-generation)
 - [License](#license)
@@ -962,11 +962,11 @@ The cloned aos repo is cached at `node_modules/.cache/hyperengine/aos-{commit}` 
 - **git** must be available on your PATH
 - The `commit` value must be a valid 7-40 character hex commit hash
 
-## Deploy & Publish
+## Deploy
 
-Hyperengine includes built-in commands for deploying AO processes and publishing modules to Arweave.
+Hyperengine includes a built-in command for deploying AO processes.
 
-Deploy spawns new AO processes and loads your bundled Lua into them. Publish uploads WASM or Lua modules to Arweave for use as custom AO modules.
+Deploy spawns new AO processes and loads your bundled Lua into them. For WASM module builds, upload the compiled module to Arweave yourself (with any Arweave bundler/upload tool) and reference it by `moduleId` in your config.
 
 ### Deploy Configuration
 
@@ -1047,53 +1047,47 @@ npx hyperengine deploy --verbose
 
 ### Module Build Deploy
 
-For processes with a published WASM module (built via `ao build`):
+For processes with a custom WASM module (built via `ao build`):
 
-1. Looks up the `moduleId` from config or the deploy manifest
+1. Reads the `moduleId` from config
 2. Spawns a new AO process using that custom module
 3. No Eval step — the code is baked into the WASM module
 
-You must run `hyperengine publish` before deploying a WASM module build.
-
-Alternatively, set the `moduleId` directly in config:
+Upload the compiled WASM module to Arweave yourself (see [Uploading WASM Modules](#uploading-wasm-modules)) and set the resulting transaction ID as the `moduleId` in config before deploying:
 
 ```ts
 export default defineConfig({
   processes: {
     main: {
       entry: 'src/process.lua',
-      moduleId: 'your-published-module-tx-id',
+      moduleId: 'your-uploaded-module-tx-id',
     },
   },
   deploy: { wallet: './wallet.json' },
 })
 ```
 
-> **Note:** Processes with `type: 'module'` (dynamic read modules) are **publish-only** — they cannot be deployed as standalone AO processes. Use `hyperengine publish` for these.
+> **Note:** Processes with `type: 'module'` (dynamic read modules) cannot be deployed as standalone AO processes. Upload their WASM module to Arweave and reference it by `moduleId` from the processes that consume it.
 
-### Publishing Modules
+### Uploading WASM Modules
 
-The `publish` command uploads build artifacts to Arweave via [Turbo](https://ardrive.io/turbo/). It uses `@ardrive/turbo-sdk`, which is included as an optional dependency and installed automatically with `npm install`. If the package is not installed, the `publish` command will prompt you to install it.
+Build your WASM module with `ao build`, then upload the resulting `dist/<name>/process.wasm` to Arweave using any Arweave upload/bundler tool you prefer.
 
-- **WASM modules**: Looks for `dist/<name>/process.wasm` (output of `ao build`), uploads with full AO module tags including `Content-Type: application/wasm`, `Data-Protocol: ao`, `Type: Module`, `Variant: ao.TN.1`, `Input-Encoding: JSON-1`, `Output-Encoding: JSON-1`, `AOS-Version: 2.0.6`, and `Name` set to the process name. When `aos` config is present, also includes `Module-Format`, `Memory-Limit`, and `Compute-Limit` derived from your config.
-- **Lua modules**: Uploads the bundled `.lua` file from `dist/` with `Content-Type: text/x-lua` and `Type: Module` tags
+When uploading an AO WASM module, include the standard AO module tags so it can be used as a custom module:
 
-```bash
-# Publish all processes
-npx hyperengine publish
+- `Content-Type: application/wasm`
+- `Data-Protocol: ao`
+- `Type: Module`
+- `Variant: ao.TN.1`
+- `Input-Encoding: JSON-1`
+- `Output-Encoding: JSON-1`
+- `Module-Format`, `Memory-Limit`, and `Compute-Limit` matching your `aos` config
 
-# Publish a specific process
-npx hyperengine publish --process reader
-
-# See upload details and timing
-npx hyperengine publish --verbose
-```
-
-The returned transaction ID is saved to the deploy manifest and used as the `moduleId` for subsequent `deploy` commands.
+Take the Arweave transaction ID returned by your upload tool and set it as the `moduleId` for the corresponding process in your config. The `deploy` command then spawns the process against that module.
 
 ### Deploy Manifest
 
-Deploy and publish results are saved to `.hyperengine/deploy.json` in your project root:
+Deploy results are saved to `.hyperengine/deploy.json` in your project root:
 
 ```json
 {
@@ -1107,7 +1101,7 @@ Deploy and publish results are saved to `.hyperengine/deploy.json` in your proje
 }
 ```
 
-This file is gitignored by default in scaffolded projects. The manifest allows `deploy` to automatically find `moduleId` values set by a prior `publish`.
+This file is gitignored by default in scaffolded projects. The manifest records the `processId` and `moduleId` of each deployed process.
 
 ## Project Structure
 
@@ -1164,10 +1158,6 @@ hyperengine build --process main
 # Generate a .rockspec from config
 hyperengine rockspec
 
-# Publish modules to Arweave
-hyperengine publish
-hyperengine publish --process reader
-
 # Deploy (spawn) AO processes
 hyperengine deploy
 hyperengine deploy --process main
@@ -1179,7 +1169,6 @@ hyperengine smoke --all
 
 # Verbose output (config, file ops, network status, timing)
 hyperengine deploy --verbose
-hyperengine publish --verbose
 
 # Debug output (all verbose info + payloads and raw responses)
 hyperengine deploy --debug
@@ -1190,7 +1179,6 @@ hyperengine deploy --debug
 | `create`   | Scaffold a new hyperengine project                               |
 | `build`    | Resolve Lua modules, inline templates, emit `.lua` bundles       |
 | `rockspec` | Generate a `.rockspec` file from luarocks config                 |
-| `publish`  | Upload WASM or Lua modules to Arweave via Turbo                  |
 | `deploy`   | Spawn AO processes and load bundled Lua code                     |
 | `smoke`    | Smoke-test compiled ao WASM modules locally via aoloader         |
 
@@ -1198,10 +1186,10 @@ Options for all commands:
 
 - `-r, --root <dir>` — Project root directory (default: `.`)
 - `-c, --config <path>` — Path to config file (default: auto-detect) (build/deploy)
-- `-p, --process <name>` — Target a specific process (build/publish/deploy)
+- `-p, --process <name>` — Target a specific process (build/deploy)
 - `--all` — Smoke-test all ao module processes (smoke)
 
-Options for `deploy` and `publish`:
+Options for `deploy`:
 
 - `-v, --verbose` — Show detailed operation logs (config resolution, file operations, network status codes, step timing)
 - `-D, --debug` — Show all details including payloads and raw responses (implies `--verbose`)
@@ -1274,7 +1262,7 @@ export default defineConfig({
     exclude: ['.crypto.init'], // Strip require() calls for unused default modules
   },
 
-  // Deploy & publish configuration (default: disabled)
+  // Deploy configuration (default: disabled)
   deploy: {
     wallet: './wallet.json',    // Path to Arweave JWK wallet (or set WALLET_PATH env var)
     hyperbeamUrl: 'https://...', // HyperBEAM node URL (or set HYPERBEAM_URL env var)
@@ -1365,7 +1353,7 @@ interface HyperengineConfig {
     exclude?: string[]
   }
 
-  /** Deploy & publish configuration */
+  /** Deploy configuration */
   deploy?: {
     /** Path to Arweave JWK wallet file (or set WALLET_PATH env var) */
     wallet?: string

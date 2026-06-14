@@ -9,8 +9,8 @@ export type { EscapeResult, ParsedExternals } from './bundler/vite-render.js'
 
 export { generateRockspec, writeRockspec } from './rockspec.js'
 
-export { loadWallet, publishProcess, deployProcess, readManifest, writeManifest, mergeManifest } from './deploy/index.js'
-export type { JWK, PublishResult, DeployResult, DeployManifest, ProcessManifestEntry } from './deploy/index.js'
+export { loadWallet, deployProcess, readManifest, writeManifest, mergeManifest } from './deploy/index.js'
+export type { JWK, DeployResult, DeployManifest, ProcessManifestEntry } from './deploy/index.js'
 
 export { smokeProcess, smoke } from './smoke.js'
 export type { SmokeResult } from './smoke.js'

@@ -215,7 +215,6 @@ function packageJson(name: string, flags: CreateFlags): string {
       build: 'hyperengine build',
       dev: 'hyperengine dev',
       deploy: 'hyperengine deploy',
-      publish: 'hyperengine publish',
     },
     devDependencies: {
       '@memetic-block/hyperengine': 'latest',
@@ -223,10 +222,7 @@ function packageJson(name: string, flags: CreateFlags): string {
       ...(flags.typescript ? { typescript: '^5.6.0' } : {}),
     },
     dependencies: {
-      '@permaweb/aoconnect': '^0.0.93',
-    },
-    optionalDependencies: {
-      '@ardrive/turbo-sdk': '^1.41.0',
+      '@permaweb/aoconnect': '^0.0.96',
     },
     overrides: {
       '@permaweb/aoconnect': '$@permaweb/aoconnect',
@@ -237,7 +233,7 @@ function packageJson(name: string, flags: CreateFlags): string {
 }
 
 function envExample(): string {
-  return `# Arweave JWK wallet file path (used by deploy and publish commands)
+  return `# Arweave JWK wallet file path (used by the deploy command)
 # WALLET_PATH=./wallet.json
 
 # HyperBEAM node URL (sets CU, MU, and Gateway for aoconnect)

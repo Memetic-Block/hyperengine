@@ -7,7 +7,7 @@ import { loadConfig } from './config.js'
 import { bundle } from './bundler/index.js'
 import { writeRockspec } from './rockspec.js'
 import { createProject, printNextSteps } from './create.js'
-import { loadWallet, publishProcess, mergeManifest, deployProcess, createLogger } from './deploy/index.js'
+import { loadWallet, mergeManifest, deployProcess, createLogger } from './deploy/index.js'
 import type { CreateFlags } from './create.js'
 
 const pkg = JSON.parse(
@@ -120,58 +120,6 @@ program
   })
 
 program
-  .command('publish')
-  .description('Publish WASM or Lua modules to Arweave via Turbo')
-  .option('-r, --root <dir>', 'Project root directory', '.')
-  .option('-p, --process <name>', 'Publish only the named process')
-  .option('-v, --verbose', 'Show detailed operation logs')
-  .option('-D, --debug', 'Show all details including payloads')
-  .action(async (opts) => {
-    const root = resolve(opts.root)
-    const logger = createLogger({ verbose: opts.verbose, debug: opts.debug })
-    const config = await loadConfig(root)
-
-    if (!config.deploy.wallet) {
-      console.error('No wallet configured. Set WALLET_PATH env var or deploy.wallet in config.')
-      process.exit(1)
-    }
-
-    logger.verbose(`Project root: ${root}`)
-    logger.verbose(`Wallet path: ${config.deploy.wallet}`)
-
-    const wallet = await loadWallet(config.deploy.wallet, root)
-
-    const targets = opts.process
-      ? config.processes.filter(p => p.name === opts.process)
-      : config.processes
-
-    if (opts.process && targets.length === 0) {
-      const names = config.processes.map(p => p.name).join(', ')
-      console.error(`Unknown process "${opts.process}". Available: ${names}`)
-      process.exit(1)
-    }
-
-    logger.verbose(`Target processes: ${targets.map(p => p.name).join(', ')}`)
-
-    const updates: Record<string, { moduleId: string }> = {}
-    for (const proc of targets) {
-      try {
-        const result = await publishProcess(proc, config.deploy, wallet, logger, config.aos)
-        console.log(`[${result.processName}] Published ${result.type} module: ${result.transactionId}`)
-        updates[result.processName] = { moduleId: result.transactionId }
-      } catch (err: unknown) {
-        console.error(`[${proc.name}] ${(err as Error).message}`)
-        process.exit(1)
-      }
-    }
-
-    await mergeManifest(root, updates)
-    console.log('Deploy manifest updated.')
-    // NB: Known issue with @permaweb/aoconnect where it doesn't properly clear setInterval(), so we force exit
-    process.exit(0)
-  })
-
-program
   .command('deploy')
   .description('Spawn AO processes and load bundled Lua code')
   .option('-r, --root <dir>', 'Project root directory', '.')
@@ -204,7 +152,8 @@ program
         const moduleOnly = config.processes.filter(p => p.type === 'module').map(p => p.name)
         let msg = `Cannot deploy "${opts.process}".`
         if (moduleOnly.includes(opts.process)) {
-          msg += ` Process "${opts.process}" is a dynamic read module (type: 'module'). Use \`publish\` instead.`
+          msg += ` Process "${opts.process}" is a dynamic read module (type: 'module'). ` +
+            `Upload its WASM module to Arweave and set \`moduleId\` on it in your config to deploy.`
         } else {
           msg += ` Available: ${deployable.join(', ')}`
         }
